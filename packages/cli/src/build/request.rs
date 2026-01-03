@@ -785,6 +785,20 @@ impl BuildRequest {
                     }));
                 }
             }
+            Platform::Ohos => {
+                if main_package.features.contains_key("mobile") && renderer.is_none() {
+                    features.push("mobile".into());
+                }
+                renderer = renderer.or(Some(Renderer::Webview));
+                bundle_format = bundle_format.or(Some(BundleFormat::Ohos));
+
+                // TODO: support multiple ohos targets
+                // For now, default to aarch64-linux-ohos
+                triple = triple.or_else(|| {
+                    Some("aarch64-linux-ohos".parse().unwrap())
+                });
+                no_default_features = true;
+            }
             Platform::Server => {
                 if main_package.features.contains_key("server") && renderer.is_none() {
                     features.push("server".into());
@@ -1413,6 +1427,7 @@ impl BuildRequest {
             // These are all super simple, just copy the exe into the folder
             // eventually, perhaps, maybe strip + encrypt the exe?
             BundleFormat::Android
+            | BundleFormat::Ohos
             | BundleFormat::MacOS
             | BundleFormat::Windows
             | BundleFormat::Linux
@@ -3213,6 +3228,7 @@ impl BuildRequest {
 
             // in theory, these all could end up directly in the root dir
             BundleFormat::Android => platform_dir.join("app"), // .apk (after bundling)
+            BundleFormat::Ohos => platform_dir.join("app"),    // .hap (after bundling)
             BundleFormat::Linux => platform_dir.join("app"),   // .appimage (after bundling)
             BundleFormat::Windows => platform_dir.join("app"), // .exe (after bundling)
         }
@@ -3246,6 +3262,9 @@ impl BuildRequest {
             // from the apk spec, the root exe is a shared library
             // we include the user's rust code as a shared library with a fixed namespace
             BundleFormat::Android => "libdioxusmain.so".to_string(),
+
+            // from the hap spec, similar to android, the root exe is a shared library
+            BundleFormat::Ohos => "libdioxusmain.so".to_string(),
 
             // this will be wrong, I think, but not important?
             BundleFormat::Web => format!("{}_bg.wasm", self.executable_name()),
@@ -3930,6 +3949,10 @@ impl BuildRequest {
             // er.... maybe even all the kotlin/java/gradle stuff?
             BundleFormat::Android => {}
 
+            // config.json (similar to AndroidManifest.xml)
+            // and the other ohos-specific metadata
+            BundleFormat::Ohos => {}
+
             // Probably some custom format or a plist file (haha)
             // When we do the proper bundle, we'll need to do something with wix templates, I think?
             BundleFormat::Windows => {}
@@ -3970,6 +3993,7 @@ impl BuildRequest {
             | BundleFormat::Linux
             | BundleFormat::Ios
             | BundleFormat::Android
+            | BundleFormat::Ohos
             | BundleFormat::Server => {}
         }
 
@@ -4540,6 +4564,13 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
                 .join("main")
                 .join("assets"),
 
+            BundleFormat::Ohos => self
+                .root_dir()
+                .join("app")
+                .join("src")
+                .join("main")
+                .join("assets"),
+
             // We put assets in public/assets for server apps
             BundleFormat::Server => self.root_dir().join("public").join("assets"),
 
@@ -4573,6 +4604,15 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
                 .join("main")
                 .join("jniLibs")
                 .join(AndroidTools::android_jnilib(&self.triple)),
+
+            // Ohos has a similar structure to android
+            BundleFormat::Ohos => self
+                .root_dir()
+                .join("app")
+                .join("src")
+                .join("main")
+                .join("libs")
+                .join("armeabi-v7a"), // TODO: support other architectures
 
             // these are all the same, I think?
             BundleFormat::Windows
@@ -4631,6 +4671,9 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             BundleFormat::Web => self.verify_web_tooling().await?,
             BundleFormat::Ios => self.verify_ios_tooling().await?,
             BundleFormat::Android => self.verify_android_tooling().await?,
+            BundleFormat::Ohos => {
+                // TODO: implement ohos tooling verification
+            }
             BundleFormat::Linux => self.verify_linux_tooling().await?,
             BundleFormat::MacOS | BundleFormat::Windows | BundleFormat::Server => {}
         }

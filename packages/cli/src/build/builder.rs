@@ -602,6 +602,12 @@ impl AppBuilder {
                     .await?;
             }
 
+            BundleFormat::Ohos => {
+                // TODO: implement ohos app launching
+                // For now, just warn the user
+                tracing::warn!("Ohos app launching is not yet supported. Please launch the app manually.");
+            }
+
             // These are all just basically running the main exe, but with slightly different resource dir paths
             BundleFormat::Server
             | BundleFormat::MacOS
@@ -1418,7 +1424,7 @@ impl AppBuilder {
         // The requirement here is based on the platform, not necessarily our current architecture.
         let requires_entropy = match self.build.bundle {
             // When running "bundled", we don't need entropy
-            BundleFormat::Web | BundleFormat::MacOS | BundleFormat::Ios | BundleFormat::Android => {
+            BundleFormat::Web | BundleFormat::MacOS | BundleFormat::Ios | BundleFormat::Android | BundleFormat::Ohos => {
                 false
             }
 
@@ -1646,6 +1652,13 @@ impl AppBuilder {
                 .lines()
                 .map(|line| line.trim())
                 .join("")
+            }
+
+            BundleFormat::Ohos => {
+                // TODO: implement ohos debugger support
+                // For now, return a placeholder URL
+                tracing::warn!("Ohos debugger is not yet supported");
+                "vscode://".to_string()
             }
         };
 
