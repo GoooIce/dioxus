@@ -2,25 +2,25 @@
 
 use dioxus_core::{provide_context, try_consume_context, use_hook};
 
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony")))]
 pub use tray_icon::*;
 
 /// tray icon menu type trait
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony")))]
 pub type DioxusTrayMenu = tray_icon::menu::Menu;
-#[cfg(any(target_os = "ios", target_os = "android"))]
+#[cfg(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony"))]
 pub type DioxusTrayMenu = ();
 
 /// tray icon icon type trait
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony")))]
 pub type DioxusTrayIcon = tray_icon::Icon;
-#[cfg(any(target_os = "ios", target_os = "android"))]
+#[cfg(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony"))]
 pub type DioxusTrayIcon = ();
 
 /// tray icon type trait
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony")))]
 pub type DioxusTray = tray_icon::TrayIcon;
-#[cfg(any(target_os = "ios", target_os = "android"))]
+#[cfg(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony"))]
 pub type DioxusTray = ();
 
 /// initializes a tray icon
