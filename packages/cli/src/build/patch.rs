@@ -1146,11 +1146,11 @@ pub fn create_undefined_symbol_stub(
                     k => k,
                 };
 
-                // plain linux *wants* these flags, but android doesn't.
+                // plain linux *wants* these flags, but android and ohos don't.
                 // unsure what's going on here, but this is special cased for now.
                 // I think the more advanced linkers don't want these flags, but the default linux linker (ld) does.
                 let flags = match triple.environment {
-                    target_lexicon::Environment::Android => SymbolFlags::None,
+                    target_lexicon::Environment::Android | target_lexicon::Environment::Ohos => SymbolFlags::None,
                     _ => sym.flags,
                 };
 

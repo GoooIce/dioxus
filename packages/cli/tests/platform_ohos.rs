@@ -14,3 +14,5 @@ fn test_platform_ohos_serde_roundtrip() {
     let decoded: Platform = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded, Platform::Ohos);
 }
+
+

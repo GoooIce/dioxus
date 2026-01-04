@@ -181,7 +181,7 @@ impl Renderer {
     pub(crate) fn feature_name(&self, target: &Triple) -> &str {
         match self {
             Renderer::Webview => match (target.environment, target.operating_system) {
-                (Environment::Android, _) | (_, OperatingSystem::IOS(_)) => "mobile",
+                (Environment::Android, _) | (Environment::Ohos, _) | (_, OperatingSystem::IOS(_)) => "mobile",
                 _ => "desktop",
             },
             Renderer::Native => "native",

@@ -134,7 +134,8 @@ impl LinkAction {
 
         let mut args = get_actual_linker_args_excluding_program_name(args);
 
-        if self.triple.environment == target_lexicon::Environment::Android {
+        // Android and OHOS don't use .lib files
+        if matches!(self.triple.environment, target_lexicon::Environment::Android | target_lexicon::Environment::Ohos) {
             args.retain(|arg| !arg.ends_with(".lib"));
         }
 
