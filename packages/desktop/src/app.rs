@@ -539,7 +539,7 @@ impl App {
         explicit_window_position: Option<tao::dpi::Position>,
     ) {
         // We only want to do this on desktop
-        if cfg!(target_os = "android") || cfg!(target_os = "ios") {
+        if cfg!(target_os = "android") || cfg!(target_os = "ios") || cfg!(target_env = "ohos") || cfg!(target_os = "harmony") {
             return;
         }
 
