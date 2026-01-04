@@ -95,6 +95,11 @@ impl Bundle {
                     .context("Failed to run gradle bundleRelease")?;
                 bundles.push(aab);
             }
+
+            BundleFormat::Ohos => {
+                tracing::warn!("Ohos bundles are not currently supported! You will need to bundle the app manually.");
+                bundles.push(client.root_dir());
+            }
         };
 
         // Copy the bundles to the output directory if one was specified
