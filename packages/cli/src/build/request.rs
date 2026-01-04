@@ -793,9 +793,9 @@ impl BuildRequest {
                 bundle_format = bundle_format.or(Some(BundleFormat::Ohos));
 
                 // TODO: support multiple ohos targets
-                // For now, default to aarch64-linux-ohos
+                // For now, default to aarch64-unknown-linux-ohos
                 triple = triple.or_else(|| {
-                    Some("aarch64-linux-ohos".parse().unwrap())
+                    Some("aarch64-unknown-linux-ohos".parse().unwrap())
                 });
                 no_default_features = true;
             }
