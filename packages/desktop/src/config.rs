@@ -299,7 +299,7 @@ impl Config {
     /// > is set to false and passed into [`with_window`](Config::with_window)
     #[allow(unused)]
     pub fn with_menu(mut self, menu: impl Into<Option<DioxusMenu>>) -> Self {
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony")))]
         {
             if self.window.window.decorations {
                 self.menu = MenuBuilderState::Set(menu.into())
