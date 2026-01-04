@@ -26,7 +26,7 @@ mod waker;
 mod webview;
 
 // mobile shortcut is only supported on mobile platforms
-#[cfg(any(target_os = "ios", target_os = "android"))]
+#[cfg(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony"))]
 mod mobile_shortcut;
 
 /// The main entrypoint for this crate
@@ -39,7 +39,7 @@ pub use tao::event::WindowEvent;
 pub use tao::window::WindowBuilder;
 pub use wry;
 // Reexport muda only if we are on desktop platforms that support menus
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_env = "ohos", target_os = "harmony")))]
 pub use muda;
 
 // Tray icon
