@@ -86,6 +86,45 @@ impl Platform {
     }
 }
 
+impl Args for Platform {
+    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+        Self::augment_args(cmd)
+    }
+
+    fn augment_args(cmd: clap::Command) -> clap::Command {
+        const HELP_HEADING: &str = "Platform";
+        cmd.arg(arg!(--web "Target a web app").help_heading(HELP_HEADING))
+            .arg(arg!(--desktop "Target a desktop app").help_heading(HELP_HEADING))
+            .arg(arg!(--macos "Target a macos desktop app").help_heading(HELP_HEADING))
+            .arg(arg!(--windows "Target a windows desktop app").help_heading(HELP_HEADING))
+            .arg(arg!(--linux "Target a linux desktop app").help_heading(HELP_HEADING))
+            .arg(arg!(--ios "Target an ios app").help_heading(HELP_HEADING))
+            .arg(arg!(--android "Target an android app").help_heading(HELP_HEADING))
+            .arg(arg!(--ohos "Target an ohos app").help_heading(HELP_HEADING))
+            .arg(arg!(--server "Target a server build").help_heading(HELP_HEADING))
+            .arg(arg!(--liveview "Target a liveview build").help_heading(HELP_HEADING))
+            .arg(
+                Arg::new("platform")
+                    .long("platform")
+                    .value_name("PLATFORM")
+                    .help("Manually set the platform (web, macos, windows, linux, ios, android, ohos, server, liveview)")
+                    .help_heading(HELP_HEADING)
+                    .value_parser([
+                        "web", "macos", "windows", "linux", "ios", "android", "ohos", "server", "liveview", "desktop",
+                    ])
+                    .conflicts_with("target_alias"),
+            )
+            .group(
+                clap::ArgGroup::new("target_alias")
+                    .args([
+                        "web", "desktop", "macos", "windows", "linux", "ios", "android", "ohos",
+                        "server", "liveview",
+                    ])
+                    .multiple(false)
+                    .required(false),
+            )
+    }
+}
 impl FromArgMatches for Platform {
     fn from_arg_matches(matches: &ArgMatches) -> Result<Self, clap::Error> {
         if let Some(identifier) = matches.get_one::<String>("platform") {
@@ -298,7 +337,7 @@ impl BundleFormat {
             Self::Linux => "Linux",
             Self::Ios => "iOS",
             Self::Android => "Android",
-            Self::Ohos => "OHOS",
+            Self::Ohos => "Ohos",
             Self::Server => "Server",
         }
     }
