@@ -970,9 +970,8 @@ impl BuildRequest {
 
         // OHOS uses the NDK clang as the linker
         if custom_linker.is_none() && bundle == BundleFormat::Ohos {
-            let min_api_level = config.application.ohos_min_api_level.unwrap_or(9);
             let ohos_tools = workspace.ohos_tools()?;
-            let cc = ohos_tools.ohos_cc(&triple, min_api_level);
+            let cc = ohos_tools.ohos_cc(&triple);
 
             // Set AR and RANLIB environment variables for the build
             std::env::set_var("AR", ohos_tools.ar_path());
@@ -5115,7 +5114,7 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         let linker = self
             .workspace
             .ohos_tools()?
-            .ohos_cc(&self.triple, self.min_api_level_or_default());
+            .ohos_cc(&self.triple);
 
         tracing::debug!("Verifying OHOS linker: {linker:?}");
 

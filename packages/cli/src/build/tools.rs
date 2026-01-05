@@ -451,8 +451,12 @@ impl OhosTools {
             .join("bin")
     }
 
-    /// Get the OHOS C compiler/linker for the given target triple
-    pub(crate) fn ohos_cc(&self, triple: &Triple, api_level: u32) -> PathBuf {
+    /// Get the OHOS C compiler/linker for the given target triple.
+    ///
+    /// Note that unlike Android NDK (which includes API level in the compiler name like
+    /// `aarch64-linux-android24-clang`), OHOS NDK compilers do not include API level in
+    /// their names. They follow the pattern: `{arch}-ohos-clang` (e.g., `aarch64-ohos-clang`).
+    pub(crate) fn ohos_cc(&self, triple: &Triple) -> PathBuf {
         let suffix = if cfg!(target_os = "windows") {
             ".cmd"
         } else {

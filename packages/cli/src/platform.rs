@@ -6,7 +6,7 @@ use std::str::FromStr;
 use target_lexicon::{Environment, OperatingSystem, Triple};
 
 #[derive(
-    Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug, Default, Args,
+    Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug, Default,
 )]
 #[non_exhaustive]
 pub(crate) enum Platform {
@@ -48,7 +48,6 @@ pub(crate) enum Platform {
 
     /// No platform was specified, so the CLI is free to choose the best one.
     #[default]
-    #[clap(skip)]
     Unknown,
 }
 
@@ -384,5 +383,25 @@ impl Display for BundleFormat {
             BundleFormat::Android => "android",
             BundleFormat::Ohos => "ohos",
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_platform_from_ohos_identifier() {
+        let platform = Platform::from_identifier("ohos").unwrap();
+        assert_eq!(platform, Platform::Ohos);
+    }
+
+    #[test]
+    fn test_platform_ohos_serde_roundtrip() {
+        let platform = Platform::Ohos;
+        let json = serde_json::to_string(&platform).unwrap();
+        assert_eq!(json, "\"ohos\"");
+        let decoded: Platform = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, Platform::Ohos);
     }
 }
