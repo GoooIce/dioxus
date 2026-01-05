@@ -349,6 +349,9 @@ impl AndroidTools {
     }
 }
 
+/// Minimum OHOS API level required
+const OHOS_MIN_API_LEVEL: u32 = 15;
+
 /// The tools for OHOS (HarmonyOS) - SDK, NDK, hvigorw, node, hdc
 #[derive(Debug, Clone)]
 pub(crate) struct OhosTools {
@@ -363,16 +366,55 @@ pub fn get_ohos_tools() -> Option<Arc<OhosTools>> {
     // Check OHOS_SDK_HOME environment variable
     let sdk = var_or_debug("OHOS_SDK_HOME")?;
 
-    // Check OHOS_NDK_HOME environment variable
-    // OHOS NDK is typically part of the SDK structure
+    // Check OHOS_NDK_HOME environment variable first
+    // If not set, try to detect it automatically from SDK structure
     let ndk = var_or_debug("OHOS_NDK_HOME").or_else(|| {
-        // Try to find NDK within the SDK directory
-        let ndk_path = sdk.join("nds");
-        if ndk_path.exists() {
-            Some(ndk_path)
-        } else {
-            None
+        // Try to detect SDK structure and find the appropriate NDK path
+        // New OHOS SDK structure: {sdk}/{version}/native/llvm/bin/
+        // Old OHOS NDK structure: {sdk}/native/toolchains/llvm/prebuilt/...
+
+        // First, try the new structure with versioned API levels
+        if let Ok(entries) = sdk.read_dir() {
+            // Look for version directories (numeric names like "15", "20", etc.)
+            let mut versions = Vec::new();
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                // Check if it's a numeric directory (API level)
+                if let Ok(ver) = name.parse::<u32>() {
+                    // Only consider versions that meet our minimum requirement
+                    if ver >= OHOS_MIN_API_LEVEL {
+                        versions.push((ver, entry.path()));
+                    }
+                }
+            }
+
+            // Sort versions and pick the lowest version that meets the minimum requirement
+            // This ensures stability - we use the oldest compatible version
+            versions.sort_by_key(|(v, _)| *v);
+            if let Some((api_ver, version_path)) = versions.first() {
+                let native_path = version_path.join("native");
+                if native_path.exists() {
+                    tracing::debug!("Detected OHOS SDK with API level {} at {:?}", api_ver, native_path);
+                    return Some(native_path);
+                }
+            }
         }
+
+        // Fallback: try the old "native" directory structure at SDK root
+        let ndk_path = sdk.join("native");
+        if ndk_path.exists() {
+            tracing::debug!("Detected OHOS NDK at {:?}", ndk_path);
+            return Some(ndk_path);
+        }
+
+        // Another fallback: try "nds" directory (typo in some SDK versions)
+        let nds_path = sdk.join("nds");
+        if nds_path.exists() {
+            tracing::debug!("Detected OHOS NDK (nds) at {:?}", nds_path);
+            return Some(nds_path);
+        }
+
+        None
     })?;
 
     // Find hvigorw wrapper script
@@ -420,6 +462,16 @@ pub fn get_ohos_tools() -> Option<Arc<OhosTools>> {
 impl OhosTools {
     /// Get the OHOS NDK toolchain directory
     pub(crate) fn ohos_tools_dir(&self) -> PathBuf {
+        // New OHOS SDK structure: {ndk}/llvm/bin/
+        // Old OHOS NDK structure: {ndk}/toolchains/llvm/prebuilt/{platform}/bin/
+
+        // Try the new structure first
+        let new_structure_path = self.ndk.join("llvm").join("bin");
+        if new_structure_path.exists() {
+            return new_structure_path;
+        }
+
+        // Fallback to the old structure
         let prebuilt = self.ndk.join("toolchains").join("llvm").join("prebuilt");
 
         if cfg!(target_os = "macos") {
@@ -453,9 +505,10 @@ impl OhosTools {
 
     /// Get the OHOS C compiler/linker for the given target triple.
     ///
-    /// Note that unlike Android NDK (which includes API level in the compiler name like
-    /// `aarch64-linux-android24-clang`), OHOS NDK compilers do not include API level in
-    /// their names. They follow the pattern: `{arch}-ohos-clang` (e.g., `aarch64-ohos-clang`).
+    /// New OHOS SDK naming: `{arch}-unknown-linux-ohos-clang` (e.g., `aarch64-unknown-linux-ohos-clang`)
+    /// Old OHOS NDK naming: `{arch}-ohos-clang` (e.g., `aarch64-ohos-clang`)
+    ///
+    /// This function tries the new format first, then falls back to the old format.
     pub(crate) fn ohos_cc(&self, triple: &Triple) -> PathBuf {
         let suffix = if cfg!(target_os = "windows") {
             ".cmd"
@@ -464,21 +517,44 @@ impl OhosTools {
         };
 
         let target = match triple.architecture {
+            Architecture::Arm(_) => "armv7-unknown-linux-ohos",
+            Architecture::Aarch64(_) => "aarch64-unknown-linux-ohos",
+            Architecture::X86_32(_) => "x86_64-unknown-linux-ohos",
+            Architecture::X86_64 => "x86_64-unknown-linux-ohos",
+            _ => &triple.to_string(),
+        };
+
+        let tools_dir = self.ohos_tools_dir();
+
+        // Try new format first: {arch}-unknown-linux-ohos-clang
+        let new_format = tools_dir.join(format!("{}-clang{}", target, suffix));
+        if new_format.exists() {
+            return new_format;
+        }
+
+        // Fallback to old format: {arch}-ohos-clang
+        let old_target = match triple.architecture {
             Architecture::Arm(_) => "armv7a-ohos",
             Architecture::Aarch64(_) => "aarch64-ohos",
             Architecture::X86_32(_) => "x86_64-ohos",
             Architecture::X86_64 => "x86_64-ohos",
             _ => &triple.to_string(),
         };
-
-        self.ohos_tools_dir()
-            .join(format!("{}-clang{}", target, suffix))
+        tools_dir.join(format!("{}-clang{}", old_target, suffix))
     }
 
     /// Get the sysroot path for OHOS
     pub(crate) fn sysroot(&self) -> PathBuf {
-        // The sysroot is typically located in the NDK under:
-        // "<ndk>/toolchains/llvm/prebuilt/<platform>/sysroot"
+        // New OHOS SDK structure: {ndk}/sysroot
+        // Old OHOS NDK structure: {ndk}/toolchains/llvm/prebuilt/<platform>/sysroot
+
+        // Try the new structure first
+        let new_sysroot = self.ndk.join("sysroot");
+        if new_sysroot.exists() {
+            return new_sysroot;
+        }
+
+        // Fallback to the old structure
         self.ohos_tools_dir()
             .parent()
             .unwrap()
