@@ -25,6 +25,47 @@
 
 This requires that webview is installed on the target system. WebView is installed by default on macOS and iOS devices, but might not come preinstalled on Windows or Linux devices. To fix these issues, follow the [instructions in the guide](guide-url).
 
+### Platform Support
+
+`dioxus-desktop` supports the following platforms:
+
+- **Desktop**: macOS, Linux, Windows
+- **Mobile**: iOS, Android
+- **OpenHarmony (OHOS)**: Experimental support for HarmonyOS devices
+
+#### OpenHarmony (OHOS) Support
+
+Dioxus now includes experimental support for OpenHarmony (HarmonyOS), allowing you to build and run Dioxus applications on HarmonyOS devices.
+
+**Supported Architectures:**
+- `aarch64-unknown-linux-ohos` (ARM64 devices)
+- `armv7a-unknown-linux-ohos` (ARM32 devices)
+- `x86_64-unknown-linux-ohos` (x86_64 emulator)
+
+**Requirements:**
+- DevEco Studio (latest version)
+- OpenHarmony SDK and NDK
+- Rust with OHOS target support
+- `hdc` (HarmonyOS Device Connector) for device deployment
+
+**Quick Start:**
+```bash
+# Add the OHOS target
+rustup target add aarch64-unknown-linux-ohos
+
+# Set environment variables
+export OHOS_SDK_HOME=/path/to/ohos/sdk
+export OHOS_NDK_HOME=/path/to/ohos/ndk
+
+# Build your app for OHOS
+dx build --platform ohos
+
+# Run on device/emulator
+dx serve --platform ohos
+```
+
+For detailed OHOS setup instructions, see the [OHOS Documentation](#ohos-documentation).
+
 [guide-url]: https://dioxuslabs.com/learn/0.7/getting_started
 
 ## Features

@@ -223,7 +223,8 @@ Dioxus has grown from a side project to a small team of fulltime engineers. Than
         <ul>
           <li>Render using Webview or - experimentally - with WGPU or Skia </li>
           <li>Build .ipa and .apk files for iOS and Android </li>
-          <li>Call directly into Java and Objective-C with minimal overhead</li>
+          <li>Build .hap packages for OpenHarmony (HarmonyOS) [Beta]</li>
+          <li>Call directly into Java, Objective-C, and HarmonyOS APIs with minimal overhead</li>
           <li>From "hello world" to running on device in seconds</li>
         </ul>
       </td>

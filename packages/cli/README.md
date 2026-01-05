@@ -57,7 +57,7 @@ or you can use this bare-bones template (only mandatory fields) to get started:
 ```toml
 [application]
 name = "project-name"
-# Currently supported platforms: web, desktop
+# Supported platforms: web, desktop, ios, android, ohos, server, liveview
 default_platform = "web"
 
 # Optional: enable copying from a static directory (e.g. "public")
@@ -68,3 +68,39 @@ title = "Hello"
 
 [web.resource.dev]
 ```
+
+## Platform Support
+
+The Dioxus CLI supports building for multiple platforms:
+
+| Platform | Description | Status |
+|----------|-------------|--------|
+| `web` | WebAssembly applications | Stable |
+| `desktop` | macOS, Linux, Windows | Stable |
+| `ios` | iOS applications | Stable |
+| `android` | Android applications | Stable |
+| `ohos` | OpenHarmony (HarmonyOS) | Beta |
+| `server` | Server-side rendering | Stable |
+| `liveview` | Liveview server | Stable |
+
+### OpenHarmony (OHOS) Support
+
+OHOS support is currently in **Beta**. To build for OHOS:
+
+1. Set up the environment variables:
+```bash
+export OHOS_SDK_HOME=/path/to/ohos/sdk
+export OHOS_NDK_HOME=/path/to/ohos/ndk
+```
+
+2. Add the OHOS target:
+```bash
+rustup target add aarch64-unknown-linux-ohos
+```
+
+3. Build and run:
+```bash
+dx serve --platform ohos
+```
+
+For detailed OHOS setup instructions, see the [OHOS CLI Reference](./OHOS_CLI_REFERENCE.md).
