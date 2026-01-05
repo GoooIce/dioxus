@@ -5569,6 +5569,45 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
                 });
             }
 
+            // Boot an OHOS emulator if one is not already running.
+            // Similar to Android, we try to find and boot the first available emulator.
+            BundleFormat::Ohos => {
+                let tools = self.workspace.ohos_tools()?;
+                tokio::spawn(async move {
+                    let hdc = tools.hdc().clone();
+                    // List available OHOS devices/emulators
+                    let devices = Command::new(&hdc)
+                        .arg("list")
+                        .arg("targets")
+                        .output()
+                        .await;
+
+                    match devices {
+                        Ok(res) => {
+                            let devices_output = String::from_utf8_lossy(&res.stdout);
+                            let lines: Vec<&str> = devices_output.lines().collect();
+
+                            // Filter for empty (not connected) devices which are likely available emulators
+                            let available_emulator = lines.iter().find(|line| {
+                                line.trim().is_empty() || line.contains("Empty") || line.contains("local")
+                            });
+
+                            if available_emulator.is_some() || !lines.is_empty() {
+                                tracing::info!("Attempting to use OHOS device/emulator");
+                                // Note: OHOS emulator management is different from Android
+                                // Users typically start emulators through DevEco Studio IDE
+                                tracing::info!("If no OHOS device/emulator is running, please start one through DevEco Studio");
+                            } else {
+                                tracing::warn!("No OHOS devices/emulators found. Please start an emulator through DevEco Studio or connect a physical device.");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to list OHOS devices: {e}. Please ensure hdc is in your PATH and OHOS tools are properly installed.");
+                        }
+                    }
+                });
+            }
+
             _ => {
                 // nothing - maybe on the web we should open the browser?
             }

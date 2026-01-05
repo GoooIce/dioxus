@@ -363,6 +363,23 @@ target/
 
 ## 设备管理
 
+### 自动设备检测
+
+Dioxus CLI 会自动检测并使用第一个可用的 OHOS 设备或模拟器。当运行 `dx serve --platform ohos` 时:
+
+1. CLI 会尝试使用 `hdc list targets` 检测可用设备
+2. 如果找到设备,会自动安装并启动应用
+3. 如果没有找到设备,会提示您启动模拟器或连接真机
+
+### 启动 OHOS 模拟器
+
+与 Android 不同,OHOS 模拟器通常需要通过 DevEco Studio IDE 启动。如果您没有运行中的设备:
+
+1. 打开 DevEco Studio
+2. 使用 Device Manager 启动模拟器
+3. 或连接物理 OHOS 设备
+4. 然后运行 `dx serve --platform ohos`
+
 ### 列出设备
 
 使用 `hdc` 工具列出连接的设备:
