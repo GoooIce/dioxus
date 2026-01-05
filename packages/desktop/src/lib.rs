@@ -10,6 +10,7 @@ mod assets;
 mod config;
 mod desktop_context;
 mod document;
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
 mod edits;
 mod element;
 mod event_handlers;
@@ -43,7 +44,7 @@ pub use wry;
 pub use muda;
 
 // Tray icon
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
 pub mod trayicon;
 
 // Public exports

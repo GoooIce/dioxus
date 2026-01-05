@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use crate::{assets::*, webview::WebviewEdits};
+use crate::assets::*;
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
+use crate::webview::WebviewEdits;
 use crate::{document::NATIVE_EVAL_JS, file_upload::FileDialogRequest};
 use base64::prelude::BASE64_STANDARD;
 use dioxus_core::AnyhowContext;
@@ -33,11 +35,12 @@ static DEFAULT_INDEX: &str = include_str!("./assets/prod.index.html");
 /// - Tries to stream edits if they're requested.
 /// - If that doesn't match, tries a user provided asset handler
 /// - If that doesn't match, tries to serve a file from the filesystem
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
 pub(super) fn desktop_handler(
     request: Request<Vec<u8>>,
     asset_handlers: AssetHandlerRegistry,
     responder: RequestAsyncResponder,
-    edit_state: &WebviewEdits,
+    edit_state: &crate::edits::WebviewEdits,
     custom_head: Option<String>,
     custom_index: Option<String>,
     root_name: &str,
@@ -91,6 +94,58 @@ pub(super) fn desktop_handler(
     }
 }
 
+/// OHOS version without devtools support
+#[cfg(any(not(feature = "devtools"), target_env = "ohos"))]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn desktop_handler(
+    request: Request<Vec<u8>>,
+    asset_handlers: AssetHandlerRegistry,
+    responder: RequestAsyncResponder,
+    custom_head: Option<String>,
+    custom_index: Option<String>,
+    root_name: &str,
+    headless: bool,
+) {
+    // Try to serve the index file first
+    if let Some(index_bytes) = index_request_simple(
+        &request,
+        custom_head,
+        custom_index,
+        root_name,
+        headless,
+    ) {
+        return responder.respond(index_bytes);
+    }
+
+    // If the request is asking for a file dialog, handle that, returning the list of files selected
+    let trimmed_uri = request.uri().path().trim_matches('/');
+    if trimmed_uri == "__file_dialog" {
+        if let Err(err) = file_dialog_responder_sync(request, responder) {
+            tracing::error!("Failed to handle file dialog request: {err:?}");
+        }
+
+        return;
+    }
+
+    // todo: we want to move the custom assets onto a different protocol or something
+    if let Some(name) = request.uri().path().split('/').nth(1) {
+        if asset_handlers.has_handler(name) {
+            let _name = name.to_string();
+            return asset_handlers.handle_request(&_name, request, responder);
+        }
+    }
+
+    match dioxus_asset_resolver::native::serve_asset(request.uri().path()) {
+        Ok(res) => responder.respond(res),
+        Err(_e) => responder.respond(
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(String::from("Failed to serve asset").into_bytes())
+                .unwrap(),
+        ),
+    }
+}
+
 /// Build the index.html file we use for bootstrapping a new app
 ///
 /// We use wry/webview by building a special index.html that forms a bridge between the webview and your rust code
@@ -100,13 +155,14 @@ pub(super) fn desktop_handler(
 /// mess with UI elements. We make this decision since other renderers like LiveView are very separate and can
 /// never properly bridge the gap. Eventually of course, the idea is to build a custom CSS/HTML renderer where you
 /// *do* have native control over elements, but that still won't work with liveview.
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
 fn index_request(
     request: &Request<Vec<u8>>,
     custom_head: Option<String>,
     custom_index: Option<String>,
     root_name: &str,
     headless: bool,
-    edit_state: &WebviewEdits,
+    edit_state: &crate::edits::WebviewEdits,
 ) -> Option<Response<Vec<u8>>> {
     // If the request is for the root, we'll serve the index.html file.
     if request.uri().path() != "/" {
@@ -146,6 +202,7 @@ fn index_request(
 /// - port: the port that the websocket server is listening on for edits
 /// - webview_id: the id of the webview that we're loading this into. This is used to differentiate between
 ///   multiple webviews in the same application, so that we can send edits to the correct one.
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
 fn module_loader(root_id: &str, headless: bool, edit_state: &WebviewEdits) -> String {
     let edits_path = edit_state.wry_queue.edits_path();
     let expected_key = edit_state.wry_queue.required_server_key();
@@ -180,6 +237,76 @@ fn module_loader(root_id: &str, headless: bool, edit_state: &WebviewEdits) -> St
     )
 }
 
+/// Simplified module loader for OHOS (without devtools/edits support)
+#[cfg(any(not(feature = "devtools"), target_env = "ohos"))]
+fn module_loader_simple(root_id: &str, headless: bool) -> String {
+    format!(
+        r#"
+<script type="module">
+    // Bring the sledgehammer code
+    {SLEDGEHAMMER_JS}
+
+    // And then extend it with our native bindings
+    {NATIVE_JS}
+
+    // The native interpreter extends the sledgehammer interpreter with a few extra methods that we use for IPC
+    window.interpreter = new NativeInterpreter("{BASE_URI}", {headless});
+
+    // Wait for the page to load before sending the initialize message
+    window.onload = function() {{
+        let root_element = window.document.getElementById("{root_id}");
+        if (root_element != null) {{
+            window.interpreter.initialize(root_element);
+            window.interpreter.sendIpcMessage("initialize");
+        }}
+    }}
+</script>
+<script type="module">
+    // Include the code for eval
+    {NATIVE_EVAL_JS}
+</script>
+"#
+    )
+}
+
+/// Simplified index request for OHOS (without devtools/edits support)
+#[cfg(any(not(feature = "devtools"), target_env = "ohos"))]
+fn index_request_simple(
+    request: &Request<Vec<u8>>,
+    custom_head: Option<String>,
+    custom_index: Option<String>,
+    root_name: &str,
+    headless: bool,
+) -> Option<Response<Vec<u8>>> {
+    // If the request is for the root, we'll serve the index.html file.
+    if request.uri().path() != "/" {
+        return None;
+    }
+
+    // Load a custom index file if provided
+    let mut index = custom_index.unwrap_or_else(|| DEFAULT_INDEX.to_string());
+
+    // Insert a custom head if provided
+    // We look just for the closing head tag. If a user provided a custom index with weird syntax, this might fail
+    if let Some(head) = custom_head {
+        index.insert_str(index.find("</head>").expect("Head element to exist"), &head);
+    }
+
+    // Inject our module loader by looking for a body tag
+    // A failure mode here, obviously, is if the user provided a custom index without a body tag
+    // Might want to document this
+    index.insert_str(
+        index.find("</body>").expect("Body element to exist"),
+        &module_loader_simple(root_name, headless),
+    );
+
+    Response::builder()
+        .header("Content-Type", "text/html")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(index.into())
+        .ok()
+}
+
 fn file_dialog_responder_sync(
     request: wry::http::Request<Vec<u8>>,
     responder: wry::RequestAsyncResponder,
@@ -197,13 +324,13 @@ fn file_dialog_responder_sync(
     let file_dialog: FileDialogRequest = serde_json::from_slice(&data_from_header)
         .context("Failed to parse x-dioxus-data header as JSON")?;
 
-    #[cfg(feature = "tokio_runtime")]
+    #[cfg(all(feature = "tokio_runtime", not(target_env = "ohos")))]
     tokio::spawn(async move {
         let file_list = file_dialog.get_file_event_async().await;
         _ = respond_to_file_dialog(file_dialog, file_list, responder);
     });
 
-    #[cfg(not(feature = "tokio_runtime"))]
+    #[cfg(any(not(feature = "tokio_runtime"), target_env = "ohos"))]
     {
         let file_list = file_dialog.get_file_event_sync();
         respond_to_file_dialog(file_dialog, file_list, responder)?;

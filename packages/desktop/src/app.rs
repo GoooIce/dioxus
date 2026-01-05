@@ -1,12 +1,14 @@
 use crate::{
     config::{Config, WindowCloseBehaviour},
-    edits::EditWebsocket,
     event_handlers::WindowEventHandlers,
     ipc::{IpcMessage, UserWindowEvent},
     query::QueryResult,
     shortcut::ShortcutRegistry,
     webview::{PendingWebview, WebviewInstance},
 };
+
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
+use crate::edits::EditWebsocket;
 use dioxus_core::VirtualDom;
 use std::{
     cell::{Cell, RefCell},
@@ -50,6 +52,7 @@ pub(crate) struct SharedContext {
     pub(crate) shortcut_manager: ShortcutRegistry,
     pub(crate) proxy: EventLoopProxy<UserWindowEvent>,
     pub(crate) target: EventLoopWindowTarget<UserWindowEvent>,
+    #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
     pub(crate) websocket: EditWebsocket,
 }
 
@@ -70,13 +73,19 @@ impl App {
             float_all: false,
             show_devtools: false,
             cfg: Cell::new(Some(cfg)),
-            shared: Rc::new(SharedContext {
-                event_handlers: WindowEventHandlers::default(),
-                pending_webviews: Default::default(),
-                shortcut_manager: ShortcutRegistry::new(),
-                proxy: event_loop.create_proxy(),
-                target: event_loop.clone(),
-                websocket: EditWebsocket::start(),
+            shared: Rc::new({
+                let context = SharedContext {
+                    event_handlers: WindowEventHandlers::default(),
+                    pending_webviews: Default::default(),
+                    shortcut_manager: ShortcutRegistry::new(),
+                    proxy: event_loop.create_proxy(),
+                    target: event_loop.clone(),
+                };
+                #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
+                let context = context {
+                    websocket: EditWebsocket::start(),
+                };
+                context
             }),
         };
 
@@ -84,15 +93,15 @@ impl App {
         dioxus_html::set_event_converter(Box::new(crate::events::SerializedHtmlEventConverter));
 
         // Wire up the global hotkey handler
-        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
         app.set_global_hotkey_handler();
 
         // Wire up the menubar receiver - this way any component can key into the menubar actions
-        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
         app.set_menubar_receiver();
 
         // Wire up the tray icon receiver - this way any component can key into the menubar actions
-        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
         app.set_tray_icon_receiver();
 
         // Allow hotreloading to work - but only in debug mode
@@ -116,12 +125,12 @@ impl App {
             .apply_event(window_event, &self.shared.target);
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     pub fn handle_global_hotkey(&self, event: global_hotkey::GlobalHotKeyEvent) {
         self.shared.shortcut_manager.call_handlers(event);
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     pub fn handle_menu_event(&mut self, event: muda::MenuEvent) {
         match event.id().0.as_str() {
             "dioxus-float-top" => {
@@ -147,12 +156,12 @@ impl App {
             _ => (),
         }
     }
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     pub fn handle_tray_menu_event(&mut self, event: tray_icon::menu::MenuEvent) {
         _ = event;
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     pub fn handle_tray_icon_event(&mut self, event: tray_icon::TrayIconEvent) {
         if let tray_icon::TrayIconEvent::Click {
             id: _,
@@ -286,11 +295,21 @@ impl App {
     pub fn handle_initialize_msg(&mut self, id: WindowId) {
         let view = self.webviews.get_mut(&id).unwrap();
 
-        view.edits
-            .wry_queue
-            .with_mutation_state_mut(|f| view.dom.rebuild(f));
+        #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
+        {
+            view.edits
+                .wry_queue
+                .with_mutation_state_mut(|f| view.dom.rebuild(f));
 
-        view.edits.wry_queue.send_edits();
+            view.edits.wry_queue.send_edits();
+        }
+
+        #[cfg(any(not(feature = "devtools"), target_env = "ohos"))]
+        {
+            // For OHOS and platforms without devtools, just rebuild the DOM
+            let mut mutations = dioxus_interpreter_js::MutationState::new();
+            let _ = view.dom.rebuild(&mut mutations);
+        }
 
         #[cfg(not(target_os = "linux"))]
         {
@@ -420,7 +439,7 @@ impl App {
         view.poll_vdom();
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     fn set_global_hotkey_handler(&self) {
         let receiver = self.shared.proxy.clone();
 
@@ -434,7 +453,7 @@ impl App {
         }));
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     fn set_menubar_receiver(&self) {
         let receiver = self.shared.proxy.clone();
 
@@ -448,7 +467,7 @@ impl App {
         }));
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     fn set_tray_icon_receiver(&self) {
         let receiver = self.shared.proxy.clone();
 

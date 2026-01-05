@@ -40,7 +40,7 @@ pub fn use_wry_event_handler(
     docsrs,
     doc(cfg(any(target_os = "windows", target_os = "linux", target_os = "macos")))
 )]
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
 pub fn use_muda_event_handler(
     mut handler: impl FnMut(&muda::MenuEvent) + 'static,
 ) -> WryEventHandler {
@@ -56,7 +56,7 @@ pub fn use_muda_event_handler(
     docsrs,
     doc(cfg(any(target_os = "windows", target_os = "linux", target_os = "macos")))
 )]
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
 pub fn use_tray_menu_event_handler(
     mut handler: impl FnMut(&tray_icon::menu::MenuEvent) + 'static,
 ) -> WryEventHandler {
@@ -74,7 +74,7 @@ pub fn use_tray_menu_event_handler(
     docsrs,
     doc(cfg(any(target_os = "windows", target_os = "linux", target_os = "macos")))
 )]
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
 pub fn use_tray_icon_event_handler(
     mut handler: impl FnMut(&tray_icon::TrayIconEvent) + 'static,
 ) -> WryEventHandler {

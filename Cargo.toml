@@ -372,7 +372,8 @@ winnow = "0.7.14"
 # desktop
 # 使用绝对路径以支持 worktree 环境
 wry = { path = "/Users/devel0per/Code/wry", default-features = false }
-tao = { version = "0.34.0", features = ["rwh_05"] }
+# 使用 richerfu/tao fork，它包含 OpenHarmony 支持
+tao = { git = "https://github.com/richerfu/tao", branch = "dev", features = ["rwh_05"] }
 infer = "0.19.0"
 dunce = "1.0.5"
 percent-encoding = "2.3.1"
@@ -1002,3 +1003,4 @@ doc-scrape-examples = true
 [[example]]
 name = "__scrape_example_list"
 path = "examples/scripts/scrape_examples.rs"
+

@@ -5,16 +5,16 @@ use tao::window::WindowId;
 #[derive(Debug, Clone)]
 pub enum UserWindowEvent {
     /// A global hotkey event
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     GlobalHotKeyEvent(global_hotkey::GlobalHotKeyEvent),
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     MudaMenuEvent(muda::MenuEvent),
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     TrayIconEvent(tray_icon::TrayIconEvent),
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
     TrayMenuEvent(tray_icon::menu::MenuEvent),
 
     /// Poll the virtualdom

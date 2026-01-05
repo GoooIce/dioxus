@@ -2,10 +2,12 @@ use crate::file_upload::{DesktopFileData, DesktopFileDragEvent};
 use crate::menubar::DioxusMenu;
 use crate::PendingDesktopContext;
 use crate::{
-    app::SharedContext, assets::AssetHandlerRegistry, edits::WryQueue,
+    app::SharedContext, assets::AssetHandlerRegistry,
     file_upload::NativeFileHover, ipc::UserWindowEvent, protocol, waker::tao_waker, Config,
     DesktopContext, DesktopService,
 };
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
+use crate::edits::WryQueue;
 use crate::{document::DesktopDocument, WeakDesktopContext};
 use crate::{element::DesktopElement, file_upload::DesktopFormData};
 use base64::prelude::BASE64_STANDARD;
@@ -20,6 +22,7 @@ use std::{cell::OnceCell, time::Duration};
 use std::{rc::Rc, task::Waker};
 use wry::{DragDropEvent, RequestAsyncResponder, WebContext, WebViewBuilder, WebViewId};
 
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
 #[derive(Clone)]
 pub(crate) struct WebviewEdits {
     runtime: Rc<Runtime>,
@@ -27,6 +30,7 @@ pub(crate) struct WebviewEdits {
     desktop_context: Rc<OnceCell<WeakDesktopContext>>,
 }
 
+#[cfg(all(feature = "devtools", not(target_env = "ohos")))]
 impl WebviewEdits {
     fn new(runtime: Rc<Runtime>, wry_queue: WryQueue) -> Self {
         Self {
@@ -180,6 +184,7 @@ impl WebviewEdits {
 
 pub(crate) struct WebviewInstance {
     pub dom: VirtualDom,
+    #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
     pub edits: WebviewEdits,
     pub desktop_context: DesktopContext,
     pub waker: Waker,
@@ -254,20 +259,21 @@ impl WebviewInstance {
         }
 
         let mut web_context = WebContext::new(cfg.data_dir.clone());
+        #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
         let edit_queue = shared.websocket.create_queue();
         let asset_handlers = AssetHandlerRegistry::new();
+        #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
         let edits = WebviewEdits::new(dom.runtime(), edit_queue.clone());
         let file_hover = NativeFileHover::default();
         let headless = !cfg.window.window.visible;
 
+        #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
         let request_handler = {
-            to_owned![
-                cfg.custom_head,
-                cfg.custom_index,
-                cfg.root_name,
-                asset_handlers,
-                edits
-            ];
+            let custom_head = cfg.custom_head.clone();
+            let custom_index = cfg.custom_index.clone();
+            let root_name = cfg.root_name.clone();
+            let asset_handlers = asset_handlers.clone();
+            let edits_clone = edits.clone();
 
             #[cfg(feature = "tokio_runtime")]
             let tokio_rt = tokio::runtime::Handle::current();
@@ -280,7 +286,33 @@ impl WebviewInstance {
                     request,
                     asset_handlers.clone(),
                     responder,
-                    &edits,
+                    &edits_clone,
+                    custom_head.clone(),
+                    custom_index.clone(),
+                    &root_name,
+                    headless,
+                )
+            }
+        };
+
+        #[cfg(any(not(feature = "devtools"), target_env = "ohos"))]
+        let request_handler = {
+            let custom_head = cfg.custom_head.clone();
+            let custom_index = cfg.custom_index.clone();
+            let root_name = cfg.root_name.clone();
+            let asset_handlers = asset_handlers.clone();
+
+            #[cfg(feature = "tokio_runtime")]
+            let tokio_rt = tokio::runtime::Handle::current();
+
+            move |_id: WebViewId, request, responder: RequestAsyncResponder| {
+                #[cfg(feature = "tokio_runtime")]
+                let _guard = tokio_rt.enter();
+
+                protocol::desktop_handler(
+                    request,
+                    asset_handlers.clone(),
+                    responder,
                     custom_head.clone(),
                     custom_index.clone(),
                     &root_name,
@@ -372,18 +404,10 @@ impl WebviewInstance {
             }) // prevent all navigations
             .with_asynchronous_custom_protocol(String::from("dioxus"), request_handler);
 
-        // Enable https scheme on android and ohos, needed for secure context API, like the geolocation API
-        #[cfg(any(
-            target_os = "android",
-            all(target_os = "linux", target_env = "ohos")
-        ))]
+        // Enable https scheme on android, needed for secure context API, like the geolocation API
+        #[cfg(target_os = "android")]
         {
-            #[cfg(target_os = "android")]
             use wry::WebViewBuilderExtAndroid as _;
-
-            #[cfg(all(target_os = "linux", target_env = "ohos"))]
-            use wry::WebViewBuilderExtOpenHarmony as _;
-
             webview = webview.with_https_scheme(true);
         };
 
@@ -507,6 +531,7 @@ impl WebviewInstance {
         ));
 
         // Provide the desktop context to the virtual dom and edit handler
+        #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
         edits.set_desktop_context(Rc::downgrade(&desktop_context));
         let provider: Rc<dyn Document> = Rc::new(DesktopDocument::new(desktop_context.clone()));
         let history_provider: Rc<dyn History> = Rc::new(MemoryHistory::default());
@@ -519,16 +544,23 @@ impl WebviewInstance {
         // Request an initial redraw
         desktop_context.window.request_redraw();
 
-        WebviewInstance {
+        let instance = WebviewInstance {
             dom,
-            edits,
             waker: tao_waker(shared.proxy.clone(), desktop_context.window.id()),
             desktop_context,
             _menu: menu,
             _web_context: web_context,
-        }
+        };
+
+        #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
+        let instance = instance {
+            edits,
+        };
+
+        instance
     }
 
+    #[cfg(all(feature = "devtools", not(target_env = "ohos")))]
     pub fn poll_vdom(&mut self) {
         let mut cx = std::task::Context::from_waker(&self.waker);
 
@@ -579,6 +611,32 @@ impl WebviewInstance {
                 .wry_queue
                 .with_mutation_state_mut(|f| self.dom.render_immediate(f));
             self.edits.wry_queue.send_edits();
+        }
+    }
+
+    #[cfg(any(not(feature = "devtools"), target_env = "ohos"))]
+    pub fn poll_vdom(&mut self) {
+        let mut cx = std::task::Context::from_waker(&self.waker);
+
+        // Continuously poll the virtualdom until it's pending
+        loop {
+            {
+                // lock the hack-ed in lock sync wry has some thread-safety issues with event handlers and async tasks
+                let _lock = crate::android_sync_lock::android_runtime_lock();
+                let fut = self.dom.wait_for_work();
+                pin_mut!(fut);
+
+                match fut.poll_unpin(&mut cx) {
+                    std::task::Poll::Ready(_) => {}
+                    std::task::Poll::Pending => return,
+                }
+            }
+
+            // lock the hack-ed in lock sync wry has some thread-safety issues with event handlers
+            let _lock = crate::android_sync_lock::android_runtime_lock();
+
+            // Render without edit queue (for OHOS and platforms without devtools)
+            self.dom.render_immediate(&mut dioxus_interpreter_js::MutationState::new());
         }
     }
 
