@@ -1,0 +1,21 @@
+[application]
+name = "OHOS E2E Test App"
+default_platform = "ohos"
+
+[web.app]
+title = "OHOS E2E Test App"
+
+[web.resource.dev]
+style = []
+script = []
+
+[web.resource.release]
+style = []
+script = []
+
+[ohos]
+min_api_level = 9
+package = "com.dioxus.ohos.test"
+version_code = 1
+version_name = "1.0.0"
+icon = "assets/icon.png"

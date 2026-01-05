@@ -1,0 +1,11 @@
+[package]
+name = "ohos-test-app"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+dioxus = { workspace = true, features = ["mobile"] }
+
+[features]
+default = []

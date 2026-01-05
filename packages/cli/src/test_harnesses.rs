@@ -113,6 +113,16 @@ async fn test_harnesses() {
                 let t = targets.unwrap();
                 assert_eq!(t.client.bundle, BundleFormat::Android);
                 assert_eq!(t.client.triple, "aarch64-linux-android".parse().unwrap());
+            })
+            .asrt(r#"dx build --ohos"#, |targets| async move {
+                let t = targets.unwrap();
+                assert_eq!(t.client.bundle, BundleFormat::Ohos);
+                assert_eq!(t.client.triple, "x86_64-unknown-linux-ohos".parse().unwrap());
+            })
+            .asrt(r#"dx build --ohos --device"#, |targets| async move {
+                let t = targets.unwrap();
+                assert_eq!(t.client.bundle, BundleFormat::Ohos);
+                assert_eq!(t.client.triple, "aarch64-unknown-linux-ohos".parse().unwrap());
             }),
         TestHarnessBuilder::new("harness-fullstack-multi-target-no-default")
             .deps(r#"dioxus = { workspace = true, features = ["fullstack"] }"#)
@@ -134,6 +144,14 @@ async fn test_harnesses() {
                 let t = targets.unwrap();
                 assert_eq!(t.client.bundle, BundleFormat::Ios);
                 assert_eq!(t.client.triple, TestHarnessBuilder::host_ios_triple_sim());
+                let server = t.server.unwrap();
+                assert_eq!(server.bundle, BundleFormat::Server);
+                assert_eq!(server.triple, Triple::host());
+            })
+            .asrt(r#"dx build --ohos"#, |targets| async move {
+                let t = targets.unwrap();
+                assert_eq!(t.client.bundle, BundleFormat::Ohos);
+                assert_eq!(t.client.triple, "x86_64-unknown-linux-ohos".parse().unwrap());
                 let server = t.server.unwrap();
                 assert_eq!(server.bundle, BundleFormat::Server);
                 assert_eq!(server.triple, Triple::host());
@@ -235,6 +253,16 @@ async fn test_harnesses() {
                     assert!(t.server.is_none());
                     assert_eq!(t.client.bundle, BundleFormat::Ios);
                     assert_eq!(t.client.triple, TestHarnessBuilder::host_ios_triple_sim());
+                    assert!(t.client.no_default_features);
+                },
+            )
+            .asrt(
+                r#"dx build --ohos"#,
+                |targets| async move {
+                    let t = targets.unwrap();
+                    assert!(t.server.is_none());
+                    assert_eq!(t.client.bundle, BundleFormat::Ohos);
+                    assert_eq!(t.client.triple, "x86_64-unknown-linux-ohos".parse().unwrap());
                     assert!(t.client.no_default_features);
                 },
             ),
