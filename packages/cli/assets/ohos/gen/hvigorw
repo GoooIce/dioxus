@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# Hvigor wrapper script for OHOS builds
+# This script is used to invoke the hvigor build system
+
+HVIGOR_WRAPPER_VER="4.0.2"
+
+# Resolve links: $0 may be a link
+PRG="$0"
+# Need this for relative symlinks.
+while [ -h "$PRG" ] ; do
+    ls=`ls -ld "$PRG"`
+    link=`expr "$ls" : '.*-> \(.*\)$'`
+    if expr "$link" : '/.*' > /dev/null; then
+        PRG="$link"
+    else
+        PRG=`dirname "$PRG"`"/$link"
+    fi
+done
+SAVED="`pwd`"
+cd "`dirname \"$PRG\"`/" >/dev/null
+APP_HOME="`pwd -P`"
+cd "$SAVED" >/dev/null
+
+# Check if node is available
+if ! command -v node &> /dev/null; then
+    echo "Error: Node.js is not installed or not in PATH"
+    echo "Please install Node.js to use hvigor"
+    exit 1
+fi
+
+# Check if hvigor exists in node_modules or locally
+HVIGOR_CMD=""
+if [ -f "$APP_HOME/hvigor/hvigor-wrapper.js" ]; then
+    HVIGOR_CMD="$APP_HOME/hvigor/hvigor-wrapper.js"
+elif [ -f "$APP_HOME/node_modules/@ohos/hvigor/bin/hvigor.js" ]; then
+    HVIGOR_CMD="$APP_HOME/node_modules/@ohos/hvigor/bin/hvigor.js"
+else
+    # Try using global hvigor or assume it's installed
+    HVIGOR_CMD="hvigor"
+fi
+
+# Execute hvigor with all arguments passed to this script
+if [ "$HVIGOR_CMD" = "hvigor" ]; then
+    node "$HVIGOR_CMD" "$@"
+else
+    node "$HVIGOR_CMD" "$@"
+fi

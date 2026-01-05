@@ -917,6 +917,19 @@ impl BuildRequest {
             ]);
         }
 
+        // OHOS builds require linking against OHOS libraries
+        if matches!(bundle, BundleFormat::Ohos) {
+            rustflags.flags.extend([
+                "-Clink-arg=-lhilog".to_string(),
+                "-Clink-arg=-lc++_shared".to_string(),
+                "-Clink-arg=-lz".to_string(),
+                format!(
+                    "-Clink-arg=-Wl,--sysroot={}",
+                    workspace.ohos_tools()?.sysroot().display()
+                ),
+            ]);
+        }
+
         // Make sure we set the sysroot for ios builds in the event the user doesn't have it set
         if matches!(bundle, BundleFormat::Ios) {
             let xcode_path = Workspace::get_xcode_path()
@@ -953,6 +966,19 @@ impl BuildRequest {
                     .android_tools()?
                     .android_cc(&triple, min_sdk_version),
             );
+        }
+
+        // OHOS uses the NDK clang as the linker
+        if custom_linker.is_none() && bundle == BundleFormat::Ohos {
+            let min_api_level = config.application.ohos_min_api_level.unwrap_or(9);
+            let ohos_tools = workspace.ohos_tools()?;
+            let cc = ohos_tools.ohos_cc(&triple, min_api_level);
+
+            // Set AR and RANLIB environment variables for the build
+            std::env::set_var("AR", ohos_tools.ar_path());
+            std::env::set_var("RANLIB", ohos_tools.ranlib());
+
+            custom_linker = Some(cc);
         }
 
         let target_dir = std::env::var("CARGO_TARGET_DIR")
@@ -3489,6 +3515,220 @@ impl BuildRequest {
         Ok(())
     }
 
+    /// Assemble the OHOS app directory structure.
+    ///
+    /// Creates the OpenHarmony project structure with configuration files,
+    /// modules, and resources. Similar to Android but with OHOS-specific files.
+    fn build_ohos_app_dir(&self) -> Result<()> {
+        use std::fs::{create_dir_all, write};
+        let root = self.root_dir();
+
+        // Create OHOS directory structure
+        let app_scope = root.join("AppScope");
+        let entry = root.join("entry");
+        let entry_main = entry.join("src").join("main");
+        let entry_modules = entry_main.join("modules").join("entry");
+        let entry_ets = entry_main.join("ets");
+        let entry_resources = entry_main.join("resources");
+        let hvigor_dir = root.join("hvigor");
+
+        create_dir_all(&app_scope)?;
+        create_dir_all(&entry)?;
+        create_dir_all(&entry_main)?;
+        create_dir_all(&entry_modules.join("libs"))?;
+        create_dir_all(&entry_modules.join("resources"))?;
+        create_dir_all(&entry_ets.join("pages"))?;
+        create_dir_all(&entry_resources)?;
+        create_dir_all(&hvigor_dir)?;
+
+        tracing::debug!(
+            r#"Initialized OHOS dirs:
+- AppScope:           {app_scope:?}
+- entry/src/main:     {entry_main:?}
+- entry/src/main/ets: {entry_ets:?}
+- hvigor:             {hvigor_dir:?}
+"#
+        );
+
+        // Handlebars template data
+        #[derive(Serialize)]
+        struct OhosHandlebarsData {
+            bundle_identifier: String,
+            app_name: String,
+            vendor: String,
+            version_code: i32,
+            version_name: String,
+        }
+
+        let hbs_data = OhosHandlebarsData {
+            bundle_identifier: self.bundle_identifier(),
+            app_name: self.bundled_app_name(),
+            vendor: "Dioxus".to_string(),
+            version_code: 1,
+            version_name: "1.0.0".to_string(),
+        };
+
+        let hbs = handlebars::Handlebars::new();
+
+        // AppScope/app.json5 - Application-level configuration
+        let app_json5 = r#"{
+  "app": {
+    "bundleName": "{{bundle_identifier}}",
+    "vendor": "{{vendor}}",
+    "versionCode": {{version_code}},
+    "versionName": "{{version_name}}",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name"
+  }
+}"#;
+        let app_json5_content = hbs.render_template(app_json5, &hbs_data)?;
+        write(app_scope.join("app.json5"), app_json5_content)?;
+
+        // AppScope/build-profile.json5
+        write(
+            app_scope.join("build-profile.json5"),
+            include_bytes!("../../assets/ohos/gen/AppScope/build-profile.json5"),
+        )?;
+
+        // entry/src/main/module.json5.hbs - Module configuration
+        let module_json5 = r#"{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "EntryAbility",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "abilities": [
+      {
+        "name": "EntryAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ts",
+        "description": "$string:EntryAbility_desc",
+        "icon": "$media:app_icon",
+        "label": "$string:EntryAbility_label",
+        "exported": true,
+        "startWindowIcon": "$media:app_icon",
+        "startWindowBackground": "$color:start_window_background"
+      }
+    ]
+  }
+}"#;
+        let module_json5_content = hbs.render_template(module_json5, &hbs_data)?;
+        write(entry_main.join("module.json5"), module_json5_content)?;
+
+        // entry/src/main/build-profile.json5
+        write(
+            entry_main.join("build-profile.json5"),
+            include_bytes!("../../assets/ohos/gen/entry/src/main/build-profile.json5"),
+        )?;
+
+        // entry/src/main/oh-package.json5
+        write(
+            entry_main.join("oh-package.json5"),
+            include_bytes!("../../assets/ohos/gen/entry/src/main/oh-package.json5"),
+        )?;
+
+        // entry/src/main/resources/base/element/string.json.hbs
+        let string_json = r#"{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "{{app_name}}"
+    },
+    {
+      "name": "module_desc",
+      "value": "Dioxus OHOS Application"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Dioxus OHOS Entry Ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "{{app_name}}"
+    }
+  ]
+}"#;
+        let string_json_content = hbs.render_template(string_json, &hbs_data)?;
+        let element_dir = entry_resources.join("base").join("element");
+        create_dir_all(&element_dir)?;
+        write(element_dir.join("string.json"), string_json_content)?;
+
+        // Create main_pages.json profile
+        let base_dir = entry_resources.join("base");
+        let profile_dir = base_dir.join("profile");
+        create_dir_all(&profile_dir)?;
+        write(
+            profile_dir.join("main_pages.json"),
+            r#"{
+  "src": [
+    "pages/Index"
+  ]
+}"#,
+        )?;
+
+        // EntryAbility.ts
+        let entryability_dir = entry_ets.join("entryability");
+        create_dir_all(&entryability_dir)?;
+        write(
+            entryability_dir.join("EntryAbility.ts"),
+            include_bytes!("../../assets/ohos/gen/entry/src/main/ets/entryability/EntryAbility.ts"),
+        )?;
+
+        // Index.ets
+        write(
+            entry_ets.join("pages").join("Index.ets"),
+            include_bytes!("../../assets/ohos/gen/entry/src/main/ets/pages/Index.ets"),
+        )?;
+
+        // hvigor/hvigor-config.json5
+        write(
+            hvigor_dir.join("hvigor-config.json5"),
+            include_bytes!("../../assets/ohos/gen/hvigor/hvigor-config.json5"),
+        )?;
+
+        // build-profile.json5 (root level)
+        write(
+            root.join("build-profile.json5"),
+            include_bytes!("../../assets/ohos/gen/build-profile.json5"),
+        )?;
+
+        // oh-package.json5 (root level)
+        write(
+            root.join("oh-package.json5"),
+            include_bytes!("../../assets/ohos/gen/oh-package.json5"),
+        )?;
+
+        // hvigorw wrapper script
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            write(
+                root.join("hvigorw"),
+                include_bytes!("../../assets/ohos/gen/hvigorw"),
+            )?;
+            std::fs::set_permissions(
+                root.join("hvigorw"),
+                std::fs::Permissions::from_mode(0o755),
+            )?;
+        }
+
+        #[cfg(windows)]
+        {
+            write(
+                root.join("hvigorw.bat"),
+                include_bytes!("../../assets/ohos/gen/hvigorw.bat"),
+            )?;
+        }
+
+        Ok(())
+    }
+
     fn wry_android_kotlin_files_out_dir(&self) -> PathBuf {
         let mut kotlin_dir = self
             .root_dir()
@@ -4415,6 +4655,34 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             }
         }
 
+        if let BundleFormat::Ohos = self.bundle {
+            ctx.status_running_hvigor();
+
+            // OHOS uses hvigorw to build .hap packages
+            let build_type = if self.release {
+                "assembleHap"
+            } else {
+                "assembleHap"
+            };
+
+            let output = Command::new(self.hvigorw_exe()?)
+                .arg(build_type)
+                .current_dir(self.root_dir())
+                .output()
+                .await
+                .context("Failed to run hvigorw")?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                bail!(
+                    "Failed to assemble hap:\nstdout: {}\nstderr: {}",
+                    stdout,
+                    stderr
+                );
+            }
+        }
+
         // if the triple is a ios or macos target, we need to codesign the binary
         if matches!(
             self.triple.operating_system,
@@ -4482,6 +4750,26 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         Ok(self.root_dir().join(gradle_exec_name))
     }
 
+    fn hvigorw_exe(&self) -> Result<PathBuf> {
+        // make sure we can execute the hvigorw script
+        #[cfg(unix)]
+        {
+            use std::os::unix::prelude::PermissionsExt;
+            std::fs::set_permissions(
+                self.root_dir().join("hvigorw"),
+                std::fs::Permissions::from_mode(0o755),
+            )
+            .context("Failed to make hvigorw executable")?;
+        }
+
+        let hvigorw_exec_name = match cfg!(windows) {
+            true => "hvigorw.bat",
+            false => "hvigorw",
+        };
+
+        Ok(self.root_dir().join(hvigorw_exec_name))
+    }
+
     pub(crate) fn debug_apk_path(&self) -> PathBuf {
         self.root_dir()
             .join("app")
@@ -4490,6 +4778,16 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             .join("apk")
             .join("debug")
             .join("app-debug.apk")
+    }
+
+    pub(crate) fn debug_hap_path(&self) -> PathBuf {
+        self.root_dir()
+            .join("entry")
+            .join("build")
+            .join("default")
+            .join("outputs")
+            .join("default")
+            .join("entry-default-unsigned.hap")
     }
 
     /// We only really currently care about:
@@ -4537,6 +4835,10 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             // by writing them here.
             if self.bundle == BundleFormat::Android {
                 self.build_android_app_dir()?;
+            }
+
+            if self.bundle == BundleFormat::Ohos {
+                self.build_ohos_app_dir()?;
             }
 
             Ok(())
@@ -4671,9 +4973,7 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             BundleFormat::Web => self.verify_web_tooling().await?,
             BundleFormat::Ios => self.verify_ios_tooling().await?,
             BundleFormat::Android => self.verify_android_tooling().await?,
-            BundleFormat::Ohos => {
-                // TODO: implement ohos tooling verification
-            }
+            BundleFormat::Ohos => self.verify_ohos_tooling().await?,
             BundleFormat::Linux => self.verify_linux_tooling().await?,
             BundleFormat::MacOS | BundleFormat::Windows | BundleFormat::Server => {}
         }
@@ -4805,6 +5105,26 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
 
         bail!(
             "Android linker not found at {linker:?}. Please set the `ANDROID_NDK_HOME` environment variable to the root of your NDK installation."
+        );
+    }
+
+    /// Check if the OHOS tooling is installed
+    ///
+    /// Looks for the OHOS SDK + NDK
+    async fn verify_ohos_tooling(&self) -> Result<()> {
+        let linker = self
+            .workspace
+            .ohos_tools()?
+            .ohos_cc(&self.triple, self.min_api_level_or_default());
+
+        tracing::debug!("Verifying OHOS linker: {linker:?}");
+
+        if linker.exists() {
+            return Ok(());
+        }
+
+        bail!(
+            "OHOS linker not found at {linker:?}. Please set the `OHOS_SDK_HOME` and `OHOS_NDK_HOME` environment variables."
         );
     }
 
@@ -5135,6 +5455,14 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             .application
             .android_min_sdk_version
             .unwrap_or(28)
+    }
+
+    /// Returns the min API level set in config for OHOS. If not set 9 is returned as a default.
+    pub(crate) fn min_api_level_or_default(&self) -> u32 {
+        self.config
+            .application
+            .ohos_min_api_level
+            .unwrap_or(9)
     }
 
     pub(crate) async fn start_simulators(&self) -> Result<()> {

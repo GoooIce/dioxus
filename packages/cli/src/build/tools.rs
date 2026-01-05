@@ -349,6 +349,219 @@ impl AndroidTools {
     }
 }
 
+/// The tools for OHOS (HarmonyOS) - SDK, NDK, hvigorw, node, hdc
+#[derive(Debug, Clone)]
+pub(crate) struct OhosTools {
+    pub(crate) sdk: PathBuf,
+    pub(crate) ndk: PathBuf,
+    pub(crate) hvigorw: PathBuf,
+    pub(crate) node: Option<PathBuf>,
+    pub(crate) hdc: PathBuf,
+}
+
+pub fn get_ohos_tools() -> Option<Arc<OhosTools>> {
+    // Check OHOS_SDK_HOME environment variable
+    let sdk = var_or_debug("OHOS_SDK_HOME")?;
+
+    // Check OHOS_NDK_HOME environment variable
+    // OHOS NDK is typically part of the SDK structure
+    let ndk = var_or_debug("OHOS_NDK_HOME").or_else(|| {
+        // Try to find NDK within the SDK directory
+        let ndk_path = sdk.join("nds");
+        if ndk_path.exists() {
+            Some(ndk_path)
+        } else {
+            None
+        }
+    })?;
+
+    // Find hvigorw wrapper script
+    // hvigorw is typically in the project root or can be found via SDK
+    let hvigorw = var_or_debug("HVIGORW")
+        .unwrap_or_else(|| {
+            // Default to hvigorw in PATH or common locations
+            PathBuf::from("hvigorw")
+        });
+
+    // Node.js is required for hvigorw
+    let node = std::env::var_os("NODE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| {
+            // Try to find node in PATH
+            which::which("node").ok()
+        });
+
+    // Find hdc (Harmony Device Connector) - similar to adb for Android
+    let hdc = var_or_debug("HDC")
+        .or_else(|| {
+            // Try to find hdc in the SDK
+            let sdk_hdc = sdk.join("toolchains").join("hdc");
+            if sdk_hdc.exists() {
+                Some(sdk_hdc)
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            // Try to find hdc in PATH
+            which::which("hdc").ok()
+        })
+        .unwrap_or_else(|| PathBuf::from("hdc"));
+
+    Some(Arc::new(OhosTools {
+        sdk,
+        ndk,
+        hvigorw,
+        node,
+        hdc,
+    }))
+}
+
+impl OhosTools {
+    /// Get the OHOS NDK toolchain directory
+    pub(crate) fn ohos_tools_dir(&self) -> PathBuf {
+        let prebuilt = self.ndk.join("toolchains").join("llvm").join("prebuilt");
+
+        if cfg!(target_os = "macos") {
+            // OHOS uses similar structure to Android NDK
+            // Try aarch64 first for Apple Silicon, fallback to x86_64
+            let aarch64_path = prebuilt.join("darwin-aarch64").join("bin");
+            if aarch64_path.exists() {
+                return aarch64_path;
+            }
+            return prebuilt.join("darwin-x86_64").join("bin");
+        }
+
+        if cfg!(target_os = "linux") {
+            return prebuilt.join("linux-x86_64").join("bin");
+        }
+
+        if cfg!(target_os = "windows") {
+            return prebuilt.join("windows-x86_64").join("bin");
+        }
+
+        // Fallback: return the first entry in the prebuilt directory
+        prebuilt
+            .read_dir()
+            .expect("Failed to read OHOS toolchains directory")
+            .next()
+            .expect("Failed to find OHOS toolchains directory")
+            .expect("Failed to read OHOS toolchain file")
+            .path()
+            .join("bin")
+    }
+
+    /// Get the OHOS C compiler/linker for the given target triple
+    pub(crate) fn ohos_cc(&self, triple: &Triple, api_level: u32) -> PathBuf {
+        let suffix = if cfg!(target_os = "windows") {
+            ".cmd"
+        } else {
+            ""
+        };
+
+        let target = match triple.architecture {
+            Architecture::Arm(_) => "armv7a-ohos",
+            Architecture::Aarch64(_) => "aarch64-ohos",
+            Architecture::X86_32(_) => "x86_64-ohos",
+            Architecture::X86_64 => "x86_64-ohos",
+            _ => &triple.to_string(),
+        };
+
+        self.ohos_tools_dir()
+            .join(format!("{}-clang{}", target, suffix))
+    }
+
+    /// Get the sysroot path for OHOS
+    pub(crate) fn sysroot(&self) -> PathBuf {
+        // The sysroot is typically located in the NDK under:
+        // "<ndk>/toolchains/llvm/prebuilt/<platform>/sysroot"
+        self.ohos_tools_dir()
+            .parent()
+            .unwrap()
+            .join("sysroot")
+    }
+
+    /// Get the hvigorw executable path
+    pub(crate) fn hvigorw_exe(&self) -> PathBuf {
+        let hvigorw = &self.hvigorw;
+
+        // On Windows, add .cmd extension if needed
+        if cfg!(target_os = "windows") {
+            let hvigorw_cmd = hvigorw.with_extension("cmd");
+            if hvigorw_cmd.exists() {
+                return hvigorw_cmd;
+            }
+        }
+
+        // Check if the path exists
+        if hvigorw.exists() {
+            return hvigorw.clone();
+        }
+
+        // Fallback to just "hvigorw" and hope it's in PATH
+        PathBuf::from("hvigorw")
+    }
+
+    /// Get the SDK path
+    pub(crate) fn sdk(&self) -> &PathBuf {
+        &self.sdk
+    }
+
+    /// Get the NDK path
+    pub(crate) fn ndk(&self) -> &PathBuf {
+        &self.ndk
+    }
+
+    /// Get the Node.js path if available
+    pub(crate) fn node(&self) -> Option<&PathBuf> {
+        self.node.as_ref()
+    }
+
+    /// Get the path to the LLVM ar tool
+    pub(crate) fn ar_path(&self) -> PathBuf {
+        self.ohos_tools_dir().join("llvm-ar")
+    }
+
+    /// Get the path to the LLVM ranlib tool
+    pub(crate) fn ranlib(&self) -> PathBuf {
+        self.ohos_tools_dir().join("llvm-ranlib")
+    }
+
+    /// Get the target C compiler
+    pub(crate) fn target_cc(&self) -> PathBuf {
+        self.ohos_tools_dir().join("clang")
+    }
+
+    /// Get the target C++ compiler
+    pub(crate) fn target_cxx(&self) -> PathBuf {
+        self.ohos_tools_dir().join("clang++")
+    }
+
+    /// Get the appropriate library directory name for the target
+    pub(crate) fn sysroot_target(rust_target: &str) -> &str {
+        match rust_target {
+            "armv7a-ohos" => "arm",
+            "aarch64-ohos" => "aarch64",
+            "x86_64-ohos" => "x86_64",
+            _ => rust_target,
+        }
+    }
+
+    /// Get libc++_shared.so path for the given triple
+    pub(crate) fn libcpp_shared(&self, triple: &Triple) -> PathBuf {
+        self.sysroot()
+            .join("usr")
+            .join("lib")
+            .join(Self::sysroot_target(&triple.to_string()))
+            .join("libc++_shared.so")
+    }
+
+    /// Get the hdc (Harmony Device Connector) executable path
+    pub(crate) fn hdc(&self) -> &PathBuf {
+        &self.hdc
+    }
+}
+
 fn var_or_debug(name: &str) -> Option<PathBuf> {
     use std::env::var;
 

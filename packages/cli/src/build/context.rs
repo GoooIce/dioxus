@@ -109,6 +109,12 @@ impl BuildContext {
         })
     }
 
+    pub(crate) fn status_running_hvigor(&self) {
+        _ = self.tx.unbounded_send(BuilderUpdate::Progress {
+            stage: BuildStage::RunningHvigor,
+        })
+    }
+
     pub(crate) fn status_codesigning(&self) {
         _ = self.tx.unbounded_send(BuilderUpdate::Progress {
             stage: BuildStage::CodeSigning,

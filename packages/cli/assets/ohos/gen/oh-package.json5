@@ -1,0 +1,12 @@
+{
+  "name": "ohos-project",
+  "version": "1.0.0",
+  "description": "Dioxus OHOS Application",
+  "main": "",
+  "author": "Dioxus",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.16"
+  }
+}

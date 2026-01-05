@@ -50,6 +50,10 @@ pub(crate) struct ApplicationConfig {
     /// Specified minimum sdk version for gradle to build the app with.
     #[serde(default)]
     pub(crate) android_min_sdk_version: Option<u32>,
+
+    /// Specified minimum API level for OHOS builds.
+    #[serde(default)]
+    pub(crate) ohos_min_api_level: Option<u32>,
 }
 
 fn public_dir_default() -> Option<PathBuf> {

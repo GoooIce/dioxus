@@ -603,9 +603,8 @@ impl AppBuilder {
             }
 
             BundleFormat::Ohos => {
-                // TODO: implement ohos app launching
-                // For now, just warn the user
-                tracing::warn!("Ohos app launching is not yet supported. Please launch the app manually.");
+                self.open_ohos(false, devserver_ip, envs, self.build.device_name.clone())
+                    .await?;
             }
 
             // These are all just basically running the main exe, but with slightly different resource dir paths
@@ -1399,6 +1398,168 @@ impl AppBuilder {
         Ok(())
     }
 
+    /// Install and launch the OHOS (HarmonyOS) app on a device/emulator using hdc.
+    ///
+    /// This is similar to `open_android` but uses OHOS-specific tools (`hdc` instead of `adb`).
+    ///
+    /// # Notes
+    ///
+    /// - This function is asynchronous and spawns a background task to handle the device setup and app launch.
+    /// - The OHOS tools (`hdc`) must be available in the system's PATH for this function to work.
+    /// - If the app fails to launch, errors are logged for debugging purposes.
+    async fn open_ohos(
+        &mut self,
+        _foreground: bool,
+        devserver_socket: SocketAddr,
+        envs: Vec<(String, String)>,
+        device_name_query: Option<String>,
+    ) -> Result<()> {
+        let hap_path = self.build.debug_hap_path();
+        let session_cache = self.build.session_cache_dir();
+        let bundle_name = self.build.bundle_identifier();
+        let hdc = self.build.workspace.ohos_tools()?.hdc().clone();
+        let (stdout_tx, stdout_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
+        // Start backgrounded since .open() is called while in the arm of the top-level match
+        let task = tokio::task::spawn(async move {
+            // Try to get the device ID for the device in case there are multiple specified devices
+            let device_id_args =
+                Self::get_ohos_device_id(&hdc, device_name_query.as_deref()).await;
+
+            // Wait for device to be ready
+            let cmd = Command::new(&hdc)
+                .args(&device_id_args)
+                .arg("shell")
+                .arg("rm")
+                .arg("-rf")
+                .arg(dioxus_cli_config::ohos_session_cache_dir())
+                .output();
+            let cmd_future = cmd.fuse();
+            pin_mut!(cmd_future);
+            tokio::select! {
+                _ = &mut cmd_future => {}
+                _ = tokio::time::sleep(Duration::from_millis(50)) => {
+                    tracing::info!("Waiting for OHOS device to be ready...");
+                    _ = cmd_future.await;
+                }
+            }
+
+            let port = devserver_socket.port();
+            if let Err(e) = Command::new(&hdc)
+                .arg("fport")
+                .arg("local")
+                .arg(format!("tcp:{port}"))
+                .arg(format!("tcp:{port}"))
+                .output()
+                .await
+            {
+                tracing::error!("failed to forward port {port}: {e}");
+            }
+
+            // Install the .hap file
+            // hdc install app.hap
+            let res = Command::new(&hdc)
+                .arg("install")
+                .arg(&hap_path)
+                .output()
+                .await?;
+            let std_err = String::from_utf8_lossy(&res.stderr);
+            if !std_err.is_empty() {
+                tracing::error!("Failed to install hap with `hdc`: {std_err}");
+            }
+
+            // Write the env vars to a .env file in our session cache
+            let env_file = session_cache.join(".env");
+            _ = std::fs::write(
+                &env_file,
+                envs.iter()
+                    .map(|(key, value)| format!("{key}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+
+            // Push the env file to the device
+            Command::new(&hdc)
+                .arg("file")
+                .arg("send")
+                .arg(&env_file)
+                .arg(dioxus_cli_config::ohos_session_cache_dir().join(".env"))
+                .output()
+                .await?;
+
+            // Start the app using aa tool (Ability Manager)
+            // hdc shell aa start -a EntryAbility -b <bundle_name>
+            let res = Command::new(&hdc)
+                .arg("shell")
+                .arg("aa")
+                .arg("start")
+                .arg("-a")
+                .arg("EntryAbility")
+                .arg("-b")
+                .arg(&bundle_name)
+                .output()
+                .await?;
+            let std_err = String::from_utf8_lossy(res.stderr.trim_ascii());
+            if !std_err.is_empty() {
+                tracing::error!("Failed to start app with `hdc`: {std_err}");
+            }
+
+            // Get the app's PID with retries
+            // Retry up to 10 times (10 seconds total) since app launch is asynchronous
+            let mut pid: Option<String> = None;
+            for attempt in 1..=10 {
+                match Self::get_ohos_app_pid(&hdc, &bundle_name, &device_id_args).await {
+                    Ok(p) => {
+                        pid = Some(p);
+                        break;
+                    }
+                    Err(_) if attempt < 10 => {
+                        tracing::debug!(
+                            "App PID not found yet, retrying in 1 second... (attempt {}/10)",
+                            attempt
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                    Err(e) => {
+                        return Err(e).context(
+                            "Failed to get app PID after 10 attempts - app may not have started",
+                        );
+                    }
+                }
+            }
+
+            let pid = pid.context("Failed to get app PID")?;
+
+            // Spawn hdc shell hilog to capture logs
+            let mut child = Command::new(&hdc)
+                .args(&device_id_args)
+                .arg("shell")
+                .arg("hilog")
+                .arg("-v")
+                .arg("brief")
+                .arg("-T")
+                .arg(&pid)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()?;
+
+            let stdout = child.stdout.take().unwrap();
+            let mut reader = BufReader::new(stdout).lines();
+
+            while let Ok(Some(line)) = reader.next_line().await {
+                _ = stdout_tx.send(line);
+            }
+
+            Ok::<(), Error>(())
+        });
+
+        self.spawn_handle = Some(task);
+        self.adb_logcat_stdout = Some(UnboundedReceiverStream::new(stdout_rx));
+
+        Ok(())
+    }
+
     fn make_entropy_path(exe: &PathBuf) -> PathBuf {
         let id = uuid::Uuid::new_v4();
         let name = id.to_string();
@@ -1655,10 +1816,94 @@ impl AppBuilder {
             }
 
             BundleFormat::Ohos => {
-                // TODO: implement ohos debugger support
-                // For now, return a placeholder URL
-                tracing::warn!("Ohos debugger is not yet supported");
-                "vscode://".to_string()
+                // OHOS debugger support - similar to Android but using hdc
+                // Get the PID of the app
+                let tools = &self.build.workspace.ohos_tools()?;
+                let pid = Command::new(tools.hdc())
+                    .arg("shell")
+                    .arg("pidof")
+                    .arg(self.build.bundle_identifier())
+                    .output()
+                    .await
+                    .ok()
+                    .and_then(|output| String::from_utf8(output.stdout).ok())
+                    .and_then(|s| s.trim().parse::<u32>().ok())
+                    .unwrap_or_default();
+
+                if pid == 0 {
+                    tracing::warn!("No OHOS app process found to attach debugger to");
+                    "vscode://".to_string()
+                } else {
+                    // Copy lldb-server to the device (from OHOS NDK)
+                    let lldb_server = tools
+                        .ohos_tools_dir()
+                        .parent()
+                        .unwrap()
+                        .join("lib")
+                        .join("clang")
+                        .join("lib")
+                        .join("linux")
+                        .join("aarch64")
+                        .join("lldb-server");
+
+                    if lldb_server.exists() {
+                        tracing::info!("Copying lldb-server to OHOS device: {lldb_server:?}");
+
+                        _ = Command::new(tools.hdc())
+                            .arg("file")
+                            .arg("send")
+                            .arg(&lldb_server)
+                            .arg("/tmp/lldb-server")
+                            .output()
+                            .await;
+
+                        // Forward requests on 10086 to the device
+                        _ = Command::new(tools.hdc())
+                            .arg("fport")
+                            .arg("local")
+                            .arg("tcp:10086")
+                            .arg("tcp:10086")
+                            .output()
+                            .await;
+
+                        // Start the lldb-server on the device
+                        _ = Command::new(tools.hdc())
+                            .arg("shell")
+                            .arg(r#"cd /tmp && chmod +x ./lldb-server && ./lldb-server platform --server --listen '*:10086'"#)
+                            .kill_on_drop(false)
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .spawn();
+
+                        let program_path = self.build.main_exe();
+                        format!(
+                            r#"vscode://vadimcn.vscode-lldb/launch/config?{{
+                                'name':'Attach to OHOS',
+                                'type':'lldb',
+                                'request':'attach',
+                                'pid': '{pid}',
+                                'processCreateCommands': [
+                                    'platform select remote-linux',
+                                    'platform connect connect://localhost:10086',
+                                    'settings set target.inherit-env false',
+                                    'settings set target.inline-breakpoint-strategy always',
+                                    'process handle SIGSEGV --pass true --stop false --notify true',
+                                    'settings append target.exec-search-paths {program_path}',
+                                    'attach --pid {pid}',
+                                    'continue'
+                                ]
+                            }}"#,
+                            program_path = program_path.display(),
+                        )
+                        .lines()
+                        .map(|line| line.trim())
+                        .join("")
+                    } else {
+                        tracing::warn!("lldb-server not found in OHOS NDK at {lldb_server:?}");
+                        "vscode://".to_string()
+                    }
+                }
             }
         };
 
@@ -1737,6 +1982,75 @@ impl AppBuilder {
             .arg("shell")
             .arg("pidof")
             .arg(application_id)
+            .output()
+            .await?;
+
+        let pid = String::from_utf8(output.stdout)?.trim().to_string();
+
+        if pid.is_empty() {
+            anyhow::bail!("App process not found - may not have started yet");
+        }
+
+        Ok(pid)
+    }
+
+    /// Get the device ID for OHOS device, similar to Android's transport_id
+    async fn get_ohos_device_id(
+        hdc: &PathBuf,
+        device_name_query: Option<&str>,
+    ) -> Vec<String> {
+        // If there are multiple devices, we pick the one matching the query
+        let mut device_specifier_args = vec![];
+
+        if let Some(device_name_query) = device_name_query {
+            if let Ok(res) = Command::new(hdc).arg("list").arg("targets").output().await {
+                let devices = String::from_utf8_lossy(&res.stdout);
+                let mut best_score = 0;
+                let mut device_identifier = "".to_string();
+                use nucleo::{chars, Config, Matcher, Utf32Str};
+                let mut matcher = Matcher::new(Config::DEFAULT);
+                let normalize = |c: char| chars::to_lower_case(chars::normalize(c));
+                let needle = device_name_query.chars().map(normalize).collect::<Vec<_>>();
+
+                for line in devices.lines() {
+                    let device_name = line.split_whitespace().next().unwrap_or("");
+                    let score = matcher
+                        .fuzzy_match(Utf32Str::Unicode(&device_name.chars().map(normalize).collect::<Vec<_>>()), Utf32Str::Unicode(&needle));
+                    if let Some(score) = score {
+                        if score > best_score {
+                            best_score = score;
+                            device_identifier = device_name.to_string();
+                        }
+                    }
+                }
+
+                if best_score != 0 {
+                    device_specifier_args.push("-t".to_string());
+                    device_specifier_args.push(device_identifier.to_string());
+                }
+            }
+
+            if device_specifier_args.is_empty() {
+                tracing::warn!(
+                    "No device found matching query: {device_name_query}. Using default device ID."
+                );
+            }
+        }
+
+        device_specifier_args
+    }
+
+    /// Get the PID of the running OHOS app
+    async fn get_ohos_app_pid(
+        hdc: &PathBuf,
+        bundle_name: &str,
+        device_id_args: &[String],
+    ) -> Result<String> {
+        let output = Command::new(hdc)
+            .args(device_id_args)
+            .arg("shell")
+            .arg("pidof")
+            .arg(bundle_name)
             .output()
             .await?;
 

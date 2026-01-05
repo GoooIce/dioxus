@@ -112,6 +112,9 @@ impl RunArgs {
                             BuildStage::RunningGradle => {
                                 tracing::info!("[{bundle_format}] Running Gradle")
                             }
+                            BuildStage::RunningHvigor => {
+                                tracing::info!("[{bundle_format}] Running Hvigor")
+                            }
                             BuildStage::CodeSigning => {
                                 tracing::info!("[{bundle_format}] Code signing app")
                             }
