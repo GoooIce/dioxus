@@ -6,18 +6,18 @@ edition = "2021"
 description = "WebView renderer for Dioxus"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DioxusLabs/dioxus/"
-homepage = "https://dioxuslabs.com/learn/0.6/getting_started"
+homepage = "https://dioxuslabs.com/learn/0.7/getting_started"
 keywords = ["dom", "ui", "gui", "react"]
 rust-version = "1.76.0"
 
 [dependencies]
 dioxus-core = { workspace = true, features = ["serialize"] }
-dioxus-html = { workspace = true, features = ["serialize", "mounted", "file_engine"] }
+dioxus-html = { workspace = true, features = ["serialize"] }
 dioxus-document = { workspace = true }
 dioxus-signals = { workspace = true, optional = true }
 dioxus-interpreter-js = { workspace = true, features = ["binary-protocol", "serialize"] }
 dioxus-cli-config = { workspace = true }
-dioxus-asset-resolver = { workspace = true }
+dioxus-asset-resolver = { workspace = true, features = ["native"] }
 generational-box = { workspace = true }
 dioxus-devtools = { workspace = true, optional = true }
 
@@ -50,7 +50,8 @@ base64 = { workspace = true }
 libc = "0.2.174"
 rand = { workspace = true, features = ["std_rng"] }
 subtle = { version = "2.6", features = ["const-generics"] }
-webbrowser = { version = "1.0" }
+bytes = { workspace = true }
+webbrowser = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3.18"
@@ -108,8 +109,6 @@ targets = [
   "aarch64-linux-android",
   "armv7-linux-androideabi",
 ]
-rustc-args = ["--cfg", "docsrs"]
-rustdoc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 dioxus = { workspace = true, features = ["desktop"] }

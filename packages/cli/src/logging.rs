@@ -29,6 +29,7 @@
 //! - set `dx config set disable-telemetry true`
 //!
 
+use crate::component::ComponentCommand;
 use crate::{dx_build_info::GIT_COMMIT_HASH_SHORT, serve::ServeUpdate, Cli, Commands, Verbosity};
 use crate::{BundleFormat, CliSettings, Workspace};
 use anyhow::{bail, Context, Error, Result};
@@ -67,6 +68,20 @@ const LOG_ENV: &str = "DIOXUS_LOG";
 const DX_SRC_FLAG: &str = "dx_src";
 
 pub static VERBOSITY: OnceLock<Verbosity> = OnceLock::new();
+
+pub fn verbosity_or_default() -> Verbosity {
+    crate::VERBOSITY.get().cloned().unwrap_or_default()
+}
+
+fn reset_cursor() {
+    use std::io::IsTerminal;
+
+    // if we are running in a terminal, reset the cursor. The tui_active flag is not set for
+    // the cargo generate TUI, but we still want to reset the cursor.
+    if std::io::stdout().is_terminal() {
+        _ = console::Term::stdout().show_cursor();
+    }
+}
 
 /// A trait that emits an anonymous JSON representation of the object, suitable for telemetry.
 pub(crate) trait Anonymized {
@@ -171,6 +186,10 @@ impl TraceController {
                     }
 
                     if field.name() == "dx_src" && !args.verbosity.verbose {
+                        return Ok(());
+                    }
+
+                    if field.name() == "telemetry" {
                         return Ok(());
                     }
 
@@ -625,11 +644,9 @@ impl TraceController {
         &self,
         res: Result<Result<StructuredOutput>, Box<dyn Any + Send>>,
     ) -> StructuredOutput {
-        // Drain the tracer as regular messages.
+        // Drain the tracer as regular messages
         self.tui_active.store(false, Ordering::Relaxed);
-
-        // Show the term cursor
-        _ = console::Term::stdout().show_cursor();
+        reset_cursor();
 
         // re-emit any remaining messages in case they're useful.
         while let Ok(Some(msg)) = self.tui_rx.lock().await.try_next() {
@@ -786,7 +803,7 @@ impl TraceController {
     /// The second return is a JSON object with the anonymized arguments as a structured value.
     pub(crate) fn command_anonymized(arg: &crate::Commands) -> (String, serde_json::Value) {
         use crate::cli::config::{Config, Setting};
-        use crate::BuildTools;
+        use crate::{print::Print, BuildTools};
         use cargo_generate::Vcs;
 
         match arg {
@@ -884,6 +901,49 @@ impl TraceController {
             ),
             Commands::Tools(tool) => match tool {
                 BuildTools::BuildAssets(_build_assets) => ("tools assets".to_string(), json!({})),
+                BuildTools::HotpatchTip(_hotpatch_tip) => ("tools hotpatch".to_string(), json!({})),
+            },
+            Commands::Print(print) => match print {
+                Print::ClientArgs(_args) => ("print client-args".to_string(), json!({})),
+                Print::ServerArgs(_args) => ("print server-args".to_string(), json!({})),
+            },
+            Commands::Components(cmd) => match cmd {
+                ComponentCommand::Add {
+                    component,
+                    registry,
+                    force,
+                } => (
+                    "components add".to_string(),
+                    json!({
+                        "component": component,
+                        "registry": registry,
+                        "force": force,
+                    }),
+                ),
+                ComponentCommand::Remove {
+                    component,
+                    registry,
+                } => (
+                    "components remove".to_string(),
+                    json!({
+                        "component": component,
+                        "registry": registry,
+                    }),
+                ),
+                ComponentCommand::Update { registry } => (
+                    "components update".to_string(),
+                    json!({
+                        "registry": registry,
+                    }),
+                ),
+                ComponentCommand::List { registry } => (
+                    "components list".to_string(),
+                    json!({
+                        "registry": registry,
+                    }),
+                ),
+                ComponentCommand::Clean => ("components clean".to_string(), json!({})),
+                ComponentCommand::Schema => ("components schema".to_string(), json!({})),
             },
         }
     }
@@ -1296,7 +1356,7 @@ async fn run_with_ctrl_c(
 
             // If we get a second ctrl-c, we just exit immediately
             None => {
-                _ = console::Term::stdout().show_cursor();
+                reset_cursor();
                 std::process::exit(1);
             }
         }

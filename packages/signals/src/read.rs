@@ -1,9 +1,12 @@
-use std::{mem::MaybeUninit, ops::Index};
+use std::collections::{HashMap, HashSet};
+use std::{
+    mem::MaybeUninit,
+    ops::{Deref, Index},
+};
 
+use crate::{ext_methods, MappedSignal, ReadSignal};
 use dioxus_core::Subscribers;
 use generational_box::{AnyStorage, UnsyncStorage};
-
-use crate::{MappedSignal, ReadSignal};
 
 /// A reference to a value that can be read from.
 #[allow(type_alias_bounds)]
@@ -73,7 +76,7 @@ pub trait ReadableExt: Readable {
     /// If the value has been dropped, this will panic. Calling this on a Signal is the same as
     /// using the signal() syntax to read and subscribe to its value
     #[track_caller]
-    fn read(&self) -> ReadableRef<Self>
+    fn read(&self) -> ReadableRef<'_, Self>
     where
         Self::Target: 'static,
     {
@@ -82,7 +85,7 @@ pub trait ReadableExt: Readable {
 
     /// Try to get the current value of the state. If this is a signal, this will subscribe the current scope to the signal.
     #[track_caller]
-    fn try_read(&self) -> Result<ReadableRef<Self>, generational_box::BorrowError>
+    fn try_read(&self) -> Result<ReadableRef<'_, Self>, generational_box::BorrowError>
     where
         Self::Target: 'static,
     {
@@ -136,7 +139,7 @@ pub trait ReadableExt: Readable {
     /// }
     /// ```
     #[track_caller]
-    fn peek(&self) -> ReadableRef<Self>
+    fn peek(&self) -> ReadableRef<'_, Self>
     where
         Self::Target: 'static,
     {
@@ -146,7 +149,7 @@ pub trait ReadableExt: Readable {
     /// Try to peek the current value of the signal without subscribing to updates. If the value has
     /// been dropped, this will return an error.
     #[track_caller]
-    fn try_peek(&self) -> Result<ReadableRef<Self>, generational_box::BorrowError>
+    fn try_peek(&self) -> Result<ReadableRef<'_, Self>, generational_box::BorrowError>
     where
         Self::Target: 'static,
     {
@@ -229,7 +232,10 @@ pub trait ReadableExt: Readable {
 
     /// Index into the inner value and return a reference to the result. If the value has been dropped or the index is invalid, this will panic.
     #[track_caller]
-    fn index<I>(&self, index: I) -> ReadableRef<Self, <Self::Target as std::ops::Index<I>>::Output>
+    fn index<I>(
+        &self,
+        index: I,
+    ) -> ReadableRef<'_, Self, <Self::Target as std::ops::Index<I>>::Output>
     where
         Self::Target: std::ops::Index<I> + 'static,
     {
@@ -313,7 +319,7 @@ pub trait ReadableVecExt<T>: Readable<Target = Vec<T>> {
 
     /// Get the first element of the inner vector.
     #[track_caller]
-    fn first(&self) -> Option<ReadableRef<Self, T>>
+    fn first(&self) -> Option<ReadableRef<'_, Self, T>>
     where
         T: 'static,
     {
@@ -322,7 +328,7 @@ pub trait ReadableVecExt<T>: Readable<Target = Vec<T>> {
 
     /// Get the last element of the inner vector.
     #[track_caller]
-    fn last(&self) -> Option<ReadableRef<Self, T>>
+    fn last(&self) -> Option<ReadableRef<'_, Self, T>>
     where
         T: 'static,
     {
@@ -331,7 +337,7 @@ pub trait ReadableVecExt<T>: Readable<Target = Vec<T>> {
 
     /// Get the element at the given index of the inner vector.
     #[track_caller]
-    fn get(&self, index: usize) -> Option<ReadableRef<Self, T>>
+    fn get(&self, index: usize) -> Option<ReadableRef<'_, Self, T>>
     where
         T: 'static,
     {
@@ -382,7 +388,7 @@ pub trait ReadableOptionExt<T>: Readable<Target = Option<T>> {
 
     /// Attempts to read the inner value of the Option.
     #[track_caller]
-    fn as_ref(&self) -> Option<ReadableRef<Self, T>>
+    fn as_ref(&self) -> Option<ReadableRef<'_, Self, T>>
     where
         T: 'static,
     {
@@ -408,7 +414,7 @@ pub trait ReadableResultExt<T, E>: Readable<Target = Result<T, E>> {
 
     /// Attempts to read the inner value of the Option.
     #[track_caller]
-    fn as_ref(&self) -> Result<ReadableRef<Self, T>, ReadableRef<Self, E>>
+    fn as_ref(&self) -> Result<ReadableRef<'_, Self, T>, ReadableRef<'_, Self, E>>
     where
         T: 'static,
         E: 'static,
@@ -420,3 +426,99 @@ pub trait ReadableResultExt<T, E>: Readable<Target = Result<T, E>> {
 }
 
 impl<T, E, R> ReadableResultExt<T, E> for R where R: Readable<Target = Result<T, E>> {}
+
+/// An extension trait for [`Readable<String>`] that provides some convenience methods.
+pub trait ReadableStringExt: Readable<Target = String> {
+    ext_methods! {
+        /// Check the capacity of the string.
+        fn capacity(&self) -> usize = String::capacity;
+    }
+}
+
+impl<W> ReadableStringExt for W where W: Readable<Target = String> {}
+
+/// An extension trait for [`Readable<String>`] and [`Readable<str>`] that provides some convenience methods.
+pub trait ReadableStrExt: Readable<Target: Deref<Target = str> + 'static> {
+    ext_methods! {
+        /// Check if the string is empty.
+        fn is_empty(&self) -> bool = |s: &Self::Target| s.deref().is_empty();
+
+        /// Get the length of the string.
+        fn len(&self) -> usize = |s: &Self::Target| s.deref().len();
+
+        /// Check if the string contains the given pattern.
+        fn contains(&self, pat: &str) -> bool = |s: &Self::Target, pat| s.deref().contains(pat);
+    }
+}
+
+impl<W> ReadableStrExt for W where W: Readable<Target: Deref<Target = str> + 'static> {}
+
+/// An extension trait for [`Readable<HashMap<K, V, H>>`] that provides some convenience methods.
+pub trait ReadableHashMapExt<K: 'static, V: 'static, H: 'static>:
+    Readable<Target = HashMap<K, V, H>>
+{
+    ext_methods! {
+        /// Check if the hashmap is empty.
+        fn is_empty(&self) -> bool = HashMap::is_empty;
+
+        /// Get the length of the hashmap.
+        fn len(&self) -> usize = HashMap::len;
+
+        /// Get the capacity of the hashmap.
+        fn capacity(&self) -> usize = HashMap::capacity;
+    }
+
+    /// Get the value for the given key.
+    #[track_caller]
+    fn get(&self, key: &K) -> Option<ReadableRef<'_, Self, V>>
+    where
+        K: std::hash::Hash + Eq,
+        H: std::hash::BuildHasher,
+    {
+        <Self::Storage as AnyStorage>::try_map(self.read(), |v| v.get(key))
+    }
+
+    /// Check if the hashmap contains the given key.
+    #[track_caller]
+    fn contains_key(&self, key: &K) -> bool
+    where
+        K: std::hash::Hash + Eq,
+        H: std::hash::BuildHasher,
+    {
+        self.with(|v| v.contains_key(key))
+    }
+}
+
+impl<K: 'static, V: 'static, H: 'static, R> ReadableHashMapExt<K, V, H> for R where
+    R: Readable<Target = HashMap<K, V, H>>
+{
+}
+
+/// An extension trait for [`Readable<HashSet<V, H>>`] that provides some convenience methods.
+pub trait ReadableHashSetExt<V: 'static, H: 'static>: Readable<Target = HashSet<V, H>> {
+    ext_methods! {
+        /// Check if the hashset is empty.
+        fn is_empty(&self) -> bool = HashSet::is_empty;
+
+        /// Get the length of the hashset.
+        fn len(&self) -> usize = HashSet::len;
+
+        /// Get the capacity of the hashset.
+        fn capacity(&self) -> usize = HashSet::capacity;
+    }
+
+    /// Check if the hashset contains the given value.
+    #[track_caller]
+    fn contains(&self, value: &V) -> bool
+    where
+        V: std::hash::Hash + Eq,
+        H: std::hash::BuildHasher,
+    {
+        self.with(|v| v.contains(value))
+    }
+}
+
+impl<V: 'static, H: 'static, R> ReadableHashSetExt<V, H> for R where
+    R: Readable<Target = HashSet<V, H>>
+{
+}

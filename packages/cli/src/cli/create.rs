@@ -2,7 +2,7 @@ use super::*;
 use crate::TraceSrc;
 use anyhow::{bail, Context};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
-use std::path::Path;
+use std::{fs, path::Path};
 
 pub(crate) static DEFAULT_TEMPLATE: &str = "gh:dioxuslabs/dioxus-template";
 
@@ -61,9 +61,11 @@ impl Create {
             self.name = Some(create::name_from_path(&self.path)?);
         }
 
+        check_path(&self.path).await?;
+
         // Perform a connectivity check so we just don't it around doing nothing if there's a network error
         if self.template.is_none() {
-            connectivity_check().await?;
+            check_connectivity().await?;
         }
 
         // If no template is specified, use the default one and set the branch to the latest release.
@@ -141,12 +143,9 @@ pub(crate) fn name_from_path(path: &Path) -> Result<String> {
 
 /// Post-creation actions for newly setup crates.
 pub(crate) fn post_create(path: &Path, vcs: &Vcs) -> Result<()> {
-    let parent_dir = path.parent();
-    let metadata = if parent_dir.is_none() {
-        None
-    } else {
+    let metadata = if let Some(parent_dir) = path.parent() {
         match cargo_metadata::MetadataCommand::new()
-            .current_dir(parent_dir.unwrap())
+            .current_dir(parent_dir)
             .exec()
         {
             Ok(v) => Some(v),
@@ -156,6 +155,8 @@ pub(crate) fn post_create(path: &Path, vcs: &Vcs) -> Result<()> {
                 anyhow::bail!("Couldn't retrieve cargo metadata: {:?}", err)
             }
         }
+    } else {
+        None
     };
 
     // 1. Add the new project to the workspace, if it exists.
@@ -194,11 +195,7 @@ pub(crate) fn post_create(path: &Path, vcs: &Vcs) -> Result<()> {
         };
 
         let mut toml = toml.parse::<toml_edit::DocumentMut>().map_err(|e| {
-            anyhow::anyhow!(
-                "failed to parse toml at {}: {}",
-                toml_path.display(),
-                e.to_string()
-            )
+            anyhow::anyhow!("failed to parse toml at {}: {}", toml_path.display(), e)
         })?;
 
         toml.as_table_mut().fmt();
@@ -237,14 +234,23 @@ fn remove_triple_newlines(string: &str) -> String {
     new_string
 }
 
+/// Check if the requested project can be created in the filesystem
+pub(crate) async fn check_path(path: &std::path::PathBuf) -> Result<()> {
+    match fs::metadata(path) {
+        Ok(_metadata) => {
+            bail!(
+                "A file or directory with the given project name \"{}\" already exists.",
+                path.to_string_lossy()
+            )
+        }
+        Err(_err) => Ok(()),
+    }
+}
+
 /// Perform a health check against github itself before we attempt to download any templates hosted
 /// on github.
-pub(crate) async fn connectivity_check() -> Result<()> {
-    if crate::VERBOSITY
-        .get()
-        .map(|f| f.offline)
-        .unwrap_or_default()
-    {
+pub(crate) async fn check_connectivity() -> Result<()> {
+    if crate::verbosity_or_default().offline {
         return Ok(());
     }
 
@@ -261,9 +267,9 @@ pub(crate) async fn connectivity_check() -> Result<()> {
             _ = tokio::time::sleep(std::time::Duration::from_millis(if x == 1 { 500 } else { 2000 })) => {}
         }
         if x == 0 {
-            println!("{GLOW_STYLE}warning{GLOW_STYLE:#}: Waiting for {LINK_STYLE}https://github.com/dioxuslabs{LINK_STYLE:#}...")
+            eprintln!("{GLOW_STYLE}warning{GLOW_STYLE:#}: Waiting for {LINK_STYLE}https://github.com/dioxuslabs{LINK_STYLE:#}...")
         } else {
-            println!(
+            eprintln!(
                 "{GLOW_STYLE}warning{GLOW_STYLE:#}: ({x}/5) Taking a while, maybe your internet is down?"
             );
         }
