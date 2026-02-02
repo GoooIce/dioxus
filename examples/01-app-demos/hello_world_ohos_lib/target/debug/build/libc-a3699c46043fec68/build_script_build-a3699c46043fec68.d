@@ -1,0 +1,5 @@
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/build/libc-a3699c46043fec68/build_script_build-a3699c46043fec68.d: /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.180/build.rs
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/build/libc-a3699c46043fec68/build_script_build-a3699c46043fec68: /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.180/build.rs
+
+/Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.180/build.rs:

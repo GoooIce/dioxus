@@ -1,0 +1,10 @@
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/const_serialize-59d19236993ccd9f.d: /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/lib.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_buffers.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_vec.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/../README.md
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/libconst_serialize-59d19236993ccd9f.rlib: /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/lib.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_buffers.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_vec.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/../README.md
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/libconst_serialize-59d19236993ccd9f.rmeta: /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/lib.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_buffers.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_vec.rs /Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/../README.md
+
+/Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/lib.rs:
+/Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_buffers.rs:
+/Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/const_vec.rs:
+/Users/devel0per/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/const-serialize-0.7.2/src/../README.md:

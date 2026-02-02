@@ -197,15 +197,27 @@ fn file_dialog_responder_sync(
     let file_dialog: FileDialogRequest = serde_json::from_slice(&data_from_header)
         .context("Failed to parse x-dioxus-data header as JSON")?;
 
-    #[cfg(feature = "tokio_runtime")]
+    #[cfg(all(
+        feature = "tokio_runtime",
+        not(target_env = "ohos")
+    ))]
     tokio::spawn(async move {
         let file_list = file_dialog.get_file_event_async().await;
         _ = respond_to_file_dialog(file_dialog, file_list, responder);
     });
 
-    #[cfg(not(feature = "tokio_runtime"))]
+    #[cfg(all(
+        not(feature = "tokio_runtime"),
+        not(target_env = "ohos")
+    ))]
     {
         let file_list = file_dialog.get_file_event_sync();
+        respond_to_file_dialog(file_dialog, file_list, responder)?;
+    }
+
+    #[cfg(target_env = "ohos")]
+    {
+        let file_list = file_dialog.get_file_event();
         respond_to_file_dialog(file_dialog, file_list, responder)?;
     }
 

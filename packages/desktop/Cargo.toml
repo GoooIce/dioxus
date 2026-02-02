@@ -78,7 +78,7 @@ ndk-sys = { version = "0.6.0" }
 ndk-context = { version = "0.1.1" }
 
 # use native tls on other platforms
-[target.'cfg(any(not(target_os = "android"), not(target_env = "ohos")))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_env = "ohos")))'.dependencies]
 tungstenite = { workspace = true, features = ["native-tls"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

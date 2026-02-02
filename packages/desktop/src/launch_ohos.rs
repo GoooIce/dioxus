@@ -41,7 +41,7 @@ pub fn launch_virtual_dom_blocking(virtual_dom: VirtualDom, mut desktop_config: 
             Event::UserEvent(event) => match event {
                 UserWindowEvent::Poll(id) => app.poll_vdom(id),
                 UserWindowEvent::NewWindow => app.handle_new_window(),
-                UserWindowEvent::CloseWindow(id) => app.handle_close_msg(id),
+                UserWindowEvent::CloseWindow(id) => app.handle_close_requested(id),
                 UserWindowEvent::Shutdown => app.control_flow = tao::event_loop::ControlFlow::Exit,
 
                 #[cfg(all(
@@ -75,43 +75,36 @@ pub fn launch_virtual_dom_blocking(virtual_dom: VirtualDom, mut desktop_config: 
                 UserWindowEvent::WindowsDragDrop(id) => {
                     if let Some(webview) = app.webviews.get(&id) {
                         webview.dom.in_runtime(|| {
-                            ScopeId::ROOT.in_runtime(|| {
-                                eval("window.interpreter.handleWindowsDragDrop();");
-                            });
+                            eval("window.interpreter.handleWindowsDragDrop();");
                         });
                     }
                 }
                 UserWindowEvent::WindowsDragLeave(id) => {
                     if let Some(webview) = app.webviews.get(&id) {
                         webview.dom.in_runtime(|| {
-                            ScopeId::ROOT.in_runtime(|| {
-                                eval("window.interpreter.handleWindowsDragLeave();");
-                            });
+                            eval("window.interpreter.handleWindowsDragLeave();");
                         });
                     }
                 }
                 UserWindowEvent::WindowsDragOver(id, x_pos, y_pos) => {
                     if let Some(webview) = app.webviews.get(&id) {
                         webview.dom.in_runtime(|| {
-                            ScopeId::ROOT.in_runtime(|| {
-                                let e = eval(
-                                    r#"
-                                    const xPos = await dioxus.recv();
-                                    const yPos = await dioxus.recv();
-                                    window.interpreter.handleWindowsDragOver(xPos, yPos)
-                                    "#,
-                                );
+                            let e = eval(
+                                r#"
+                                const xPos = await dioxus.recv();
+                                const yPos = await dioxus.recv();
+                                window.interpreter.handleWindowsDragOver(xPos, yPos)
+                                "#,
+                            );
 
-                                _ = e.send(x_pos);
-                                _ = e.send(y_pos);
-                            });
+                            _ = e.send(x_pos);
+                            _ = e.send(y_pos);
                         });
                     }
                 }
 
                 UserWindowEvent::Ipc { id, msg } => match msg.method() {
                     IpcMethod::Initialize => app.handle_initialize_msg(id),
-                    IpcMethod::FileDialog => app.handle_file_dialog_msg(msg, id),
                     IpcMethod::UserEvent => {}
                     IpcMethod::Query => app.handle_query_msg(msg, id),
                     IpcMethod::BrowserOpen => app.handle_browser_open(msg),

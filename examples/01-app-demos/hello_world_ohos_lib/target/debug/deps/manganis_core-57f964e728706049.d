@@ -1,0 +1,15 @@
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/manganis_core-57f964e728706049.d: /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/lib.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/folder.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/images.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/options.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/js.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/asset.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module_parser.rs
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/libmanganis_core-57f964e728706049.rlib: /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/lib.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/folder.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/images.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/options.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/js.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/asset.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module_parser.rs
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/libmanganis_core-57f964e728706049.rmeta: /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/lib.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/folder.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/images.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/options.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/js.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/asset.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module.rs /Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module_parser.rs
+
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/lib.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/folder.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/images.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/options.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/js.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/asset.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module.rs:
+/Users/devel0per/Code/dioxus/packages/manganis/manganis-core/src/css_module_parser.rs:

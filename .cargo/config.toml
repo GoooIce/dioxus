@@ -1,0 +1,7 @@
+[target.aarch64-unknown-linux-ohos]
+linker = "/Users/devel0per/Library/OpenHarmony/Sdk/20/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
+
+[env]
+CC_AARCH64_UNKNOWN_LINUX_OHOS = "/Users/devel0per/Library/OpenHarmony/Sdk/20/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
+AR_AARCH64_UNKNOWN_LINUX_OHOS = "/Users/devel0per/Library/OpenHarmony/Sdk/20/native/llvm/bin/llvm-ar"
+CFLAGS_AARCH64_UNKNOWN_LINUX_OHOS = "--sysroot=/Users/devel0per/Library/OpenHarmony/Sdk/20/native/sysroot"

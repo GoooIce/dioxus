@@ -1,0 +1,17 @@
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/const_serialize-083069e77037a3ca.d: /Users/devel0per/Code/dioxus/packages/const-serialize/src/lib.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/const_buffers.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/cbor.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/const_vec.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/enum.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/struct.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/primitive.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/list.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/array.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/str.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/../README.md
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/libconst_serialize-083069e77037a3ca.rlib: /Users/devel0per/Code/dioxus/packages/const-serialize/src/lib.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/const_buffers.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/cbor.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/const_vec.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/enum.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/struct.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/primitive.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/list.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/array.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/str.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/../README.md
+
+/Users/devel0per/Code/dioxus/examples/01-app-demos/hello_world_ohos_lib/target/debug/deps/libconst_serialize-083069e77037a3ca.rmeta: /Users/devel0per/Code/dioxus/packages/const-serialize/src/lib.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/const_buffers.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/cbor.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/const_vec.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/enum.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/struct.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/primitive.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/list.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/array.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/str.rs /Users/devel0per/Code/dioxus/packages/const-serialize/src/../README.md
+
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/lib.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/const_buffers.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/cbor.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/const_vec.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/enum.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/struct.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/primitive.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/list.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/array.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/str.rs:
+/Users/devel0per/Code/dioxus/packages/const-serialize/src/../README.md:

@@ -1,0 +1,14 @@
+[workspace]
+
+[package]
+name = "hello_world_ohos"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dioxus = { path = "../../../packages/dioxus", features = ["macro", "html", "signals", "hooks"] }
+
+[lib]
+name = "hello_world_ohos"
+path = "lib.rs"
+crate-type = ["cdylib"]

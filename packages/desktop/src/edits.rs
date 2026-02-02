@@ -18,30 +18,46 @@
 //! If this happens, we will automatically switch to a new port and notify the webview of the new location
 //! and key. The webview will then reconnect to the new port and continue receiving edits.
 
+#[cfg(target_env = "ohos")]
+pub use self::ohos_stub::*;
+
+#[cfg(not(target_env = "ohos"))]
 use dioxus_interpreter_js::MutationState;
+#[cfg(not(target_env = "ohos"))]
 use futures_channel::oneshot;
+#[cfg(not(target_env = "ohos"))]
 use futures_util::FutureExt;
+#[cfg(not(target_env = "ohos"))]
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;
+#[cfg(not(target_env = "ohos"))]
 use std::collections::{HashMap, VecDeque};
+#[cfg(not(target_env = "ohos"))]
 use std::future::Future;
+#[cfg(not(target_env = "ohos"))]
 use std::net::{TcpListener, TcpStream};
+#[cfg(not(target_env = "ohos"))]
 use std::pin::Pin;
 use std::rc::Rc;
+#[cfg(not(target_env = "ohos"))]
 use std::sync::atomic::AtomicU32;
 use std::sync::Mutex;
+#[cfg(not(target_env = "ohos"))]
 use std::{
     net::IpAddr,
     sync::{Arc, RwLock},
 };
+#[cfg(not(target_env = "ohos"))]
 use tokio::sync::Notify;
 
 /// This handles communication between the requests that the webview makes and the interpreter.
+#[cfg(not(target_env = "ohos"))]
 #[derive(Clone)]
 pub(crate) struct WryQueue {
     inner: Rc<RefCell<WryQueueInner>>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl WryQueue {
     pub(crate) fn with_mutation_state_mut<O: 'static>(
         &self,
@@ -111,6 +127,7 @@ impl WryQueue {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 pub(crate) struct WryQueueInner {
     location: WebviewWebsocketLocation,
     websocket: EditWebsocket,
@@ -123,6 +140,7 @@ pub(crate) struct WryQueueInner {
 }
 
 /// The location of a webview websocket connection. This is used to identify the webview and the port it is connected to.
+#[cfg(not(target_env = "ohos"))]
 #[derive(Clone)]
 pub(crate) struct WebviewWebsocketLocation {
     /// The id of the webview that this websocket is connected to
@@ -130,6 +148,7 @@ pub(crate) struct WebviewWebsocketLocation {
     server: Arc<Mutex<ServerLocation>>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ServerLocation {
     /// The port the websocket is on
@@ -142,6 +161,7 @@ pub(crate) struct ServerLocation {
 }
 
 /// Start a new server on an available port on localhost. Return the server location and the TCP listener that is bound to the port.
+#[cfg(not(target_env = "ohos"))]
 pub(crate) fn start_server() -> (ServerLocation, TcpListener) {
     let client_key = create_secure_key();
     let server_key = create_secure_key();
@@ -159,6 +179,7 @@ pub(crate) fn start_server() -> (ServerLocation, TcpListener) {
 /// The websocket listener that the webview will connect to in order to receive edits and send requests. There
 /// is only one websocket listener per application even if there are multiple windows so we don't use all the
 /// open ports.
+#[cfg(not(target_env = "ohos"))]
 #[derive(Clone)]
 pub(crate) struct EditWebsocket {
     current_location: Arc<Mutex<ServerLocation>>,
@@ -167,6 +188,7 @@ pub(crate) struct EditWebsocket {
     server_location: Arc<Notify>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl EditWebsocket {
     pub(crate) fn start() -> Self {
         let connections = Arc::new(RwLock::new(HashMap::new()));
@@ -401,6 +423,7 @@ impl EditWebsocket {
 
 /// The state of a webview websocket connection. This may be pending while the webview is booting.
 /// If it is, we queue up edits until the webview is ready to receive them.
+#[cfg(not(target_env = "ohos"))]
 enum WebviewConnectionState {
     Pending {
         pending: VecDeque<MsgPair>,
@@ -410,6 +433,7 @@ enum WebviewConnectionState {
     },
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl Default for WebviewConnectionState {
     fn default() -> Self {
         WebviewConnectionState::Pending {
@@ -418,6 +442,7 @@ impl Default for WebviewConnectionState {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 impl WebviewConnectionState {
     /// Add a message to the active connection or queue and return a receiver that will be resolved
     /// when the webview has applied the edits.
@@ -445,21 +470,26 @@ impl WebviewConnectionState {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 struct MsgPair {
     edits: Vec<u8>,
     response: oneshot::Sender<()>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 const KEY_SIZE: usize = 256;
+#[cfg(not(target_env = "ohos"))]
 type EncodedKey = [u8; KEY_SIZE];
 
 /// Base64 encode the key to a string to be used in the websocket URL.
+#[cfg(not(target_env = "ohos"))]
 fn encode_key_string(key: &EncodedKey) -> String {
     base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE, key)
 }
 
 /// Create a secure key for the websocket connection.
 /// Returns the key as a byte array and a hex-encoded string representation of the key.
+#[cfg(not(target_env = "ohos"))]
 fn create_secure_key() -> EncodedKey {
     // Helper function to assert that the RNG is a CryptoRng - make sure we use a secure RNG
     fn assert_crypto_random<R: rand::CryptoRng>(val: R) -> R {
@@ -485,6 +515,7 @@ fn test_key_encoding_length() {
 }
 
 // Take an Arc<Notify> and create a future that waits for the notify to be triggered.
+#[cfg(not(target_env = "ohos"))]
 fn owned_notify_future(notify: Arc<Notify>) -> Pin<Box<dyn Future<Output = ()>>> {
     let mut notify_owned = Box::pin(async move {
         let notified = notify.notified();
@@ -497,4 +528,100 @@ fn owned_notify_future(notify: Arc<Notify>) -> Pin<Box<dyn Future<Output = ()>>>
     // Start tracking notify before the output future is polled
     _ = (&mut notify_owned).now_or_never();
     notify_owned
+}
+
+// OHOS stub implementation - OHOS uses a different communication mechanism
+// This module provides minimal stub implementations to allow compilation on OHOS
+#[cfg(target_env = "ohos")]
+mod ohos_stub {
+    use super::*;
+    use dioxus_interpreter_js::MutationState;
+    use std::sync::{Arc, Mutex, atomic::AtomicU32};
+    use std::net::TcpListener;
+
+    #[derive(Clone)]
+    pub(crate) struct WryQueue {
+        _inner: Rc<RefCell<WryQueueInner>>,
+    }
+
+    pub(crate) struct WryQueueInner {
+        pub(crate) mutation_state: MutationState,
+    }
+
+    impl WryQueue {
+        pub(crate) fn with_mutation_state_mut<O: 'static>(
+            &self,
+            callback: impl FnOnce(&mut MutationState) -> O,
+        ) -> O {
+            let mut inner = self._inner.borrow_mut();
+            callback(&mut inner.mutation_state)
+        }
+
+        pub(crate) fn send_edits(&self) {
+            // OHOS uses a different mechanism - stub implementation
+        }
+
+        pub(crate) fn poll_edits_flushed(
+            &self,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<()> {
+            std::task::Poll::Ready(())
+        }
+
+        pub(crate) fn poll_new_edits_location(
+            &self,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<()> {
+            std::task::Poll::Ready(())
+        }
+
+        pub(crate) fn edits_path(&self) -> String {
+            String::new()
+        }
+
+        pub(crate) fn required_server_key(&self) -> String {
+            String::new()
+        }
+    }
+
+    pub(crate) struct WebviewWebsocketLocation {
+        pub webview_id: u32,
+    }
+
+    pub(crate) struct ServerLocation {
+        pub port: u16,
+        pub server_key: [u8; 256],
+        pub client_key: [u8; 256],
+    }
+
+    pub(crate) fn start_server() -> (ServerLocation, TcpListener) {
+        // Stub implementation - OHOS doesn't use TCP listener
+        unimplemented!("OHOS doesn't use websocket server")
+    }
+
+    pub(crate) struct EditWebsocket {
+        _current_location: Arc<Mutex<ServerLocation>>,
+        _max_webview_id: Arc<AtomicU32>,
+    }
+
+    impl EditWebsocket {
+        pub(crate) fn start() -> Self {
+            Self {
+                _current_location: Arc::new(Mutex::new(ServerLocation {
+                    port: 0,
+                    server_key: [0u8; 256],
+                    client_key: [0u8; 256],
+                })),
+                _max_webview_id: Arc::new(AtomicU32::new(0)),
+            }
+        }
+
+        pub(crate) fn create_queue(&self) -> WryQueue {
+            WryQueue {
+                _inner: Rc::new(RefCell::new(WryQueueInner {
+                    mutation_state: MutationState::default(),
+                })),
+            }
+        }
+    }
 }
