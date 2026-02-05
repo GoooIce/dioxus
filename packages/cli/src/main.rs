@@ -15,6 +15,7 @@ mod error;
 mod fastfs;
 mod logging;
 mod mobile;
+mod ohos;
 mod platform;
 mod rustcwrapper;
 mod serve;
@@ -25,8 +26,6 @@ mod wasm_bindgen;
 mod wasm_opt;
 mod workspace;
 
-// Platform-specific modules
-mod ohos;
 
 use std::process::ExitCode;
 
