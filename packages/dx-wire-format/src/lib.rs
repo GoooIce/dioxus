@@ -108,6 +108,7 @@ pub enum BuildStage {
     },
     Bundling,
     RunningGradle,
+    RunningHvigor,
     CodeSigning,
     Success,
     Failed,

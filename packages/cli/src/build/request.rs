@@ -4432,6 +4432,31 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             }
         }
 
+        if let BundleFormat::Ohos = self.bundle {
+            ctx.status_running_hvigor();
+
+            // When the build mode is set to release and there is an OHOS signature configuration, use assembleHap
+            let build_type = if self.release && self.config.bundle.ohos.is_some() {
+                "assembleHap"
+            } else {
+                "assembleHap"
+            };
+
+            let output = Command::new(self.hvigor_exe()?)
+                .arg(build_type)
+                .current_dir(self.root_dir())
+                .output()
+                .await
+                .context("Failed to run hvigor")?;
+
+            if !output.status.success() {
+                bail!(
+                    "Failed to assemble hap: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+
         // if the triple is a ios or macos target, we need to codesign the binary
         if matches!(
             self.triple.operating_system,
@@ -4475,6 +4500,41 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         let to = app_release.join(format!("{}-{}.aab", self.bundled_app_name(), self.triple));
 
         std::fs::rename(from, &to).context("Failed to rename aab")?;
+
+        Ok(to)
+    }
+
+    /// Run assembleHap and return the path to the `.hap` file
+    ///
+    /// This function runs hvigor assembleHap to build the OpenHarmony application package.
+    pub(crate) async fn ohos_hvigor_bundle(&self) -> Result<PathBuf> {
+        let output = Command::new(self.hvigor_exe()?)
+            .arg("assembleHap")
+            .current_dir(self.root_dir())
+            .output()
+            .await
+            .context("Failed to run hvigor assembleHap")?;
+
+        if !output.status.success() {
+            bail!(
+                "Failed to assembleHap: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        let app_hap = self
+            .root_dir()
+            .join("entry")
+            .join("build")
+            .join("default")
+            .join("outputs")
+            .join("default");
+
+        // Rename it to Name-arch.hap
+        let from = app_hap.join("entry-default-unsigned.hap");
+        let to = app_hap.join(format!("{}-{}.hap", self.bundled_app_name(), self.triple));
+
+        std::fs::rename(from, &to).context("Failed to rename hap")?;
 
         Ok(to)
     }
@@ -4553,6 +4613,26 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         };
 
         Ok(self.root_dir().join(gradle_exec_name))
+    }
+
+    fn hvigor_exe(&self) -> Result<PathBuf> {
+        // make sure we can execute the hvigorw script
+        #[cfg(unix)]
+        {
+            use std::os::unix::prelude::PermissionsExt;
+            std::fs::set_permissions(
+                self.root_dir().join("hvigorw"),
+                std::fs::Permissions::from_mode(0o755),
+            )
+            .context("Failed to make hvigorw executable")?;
+        }
+
+        let hvigor_exec_name = match cfg!(windows) {
+            true => "hvigorw.bat",
+            false => "hvigorw",
+        };
+
+        Ok(self.root_dir().join(hvigor_exec_name))
     }
 
     pub(crate) fn debug_apk_path(&self) -> PathBuf {

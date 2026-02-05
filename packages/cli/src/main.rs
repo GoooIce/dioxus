@@ -25,6 +25,7 @@ mod wasm_bindgen;
 mod wasm_opt;
 mod workspace;
 
+// Platform-specific modules
 mod ohos;
 
 use std::process::ExitCode;

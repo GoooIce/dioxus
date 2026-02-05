@@ -7,6 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #2971 | 8:11 PM | ✅ | Restored ohos/mod.rs from commit 705d65f81 | ~134 |
 | #2915 | 7:48 PM | 🔴 | Created OHOS project module with metadata and generation functions | ~246 |
 | #2912 | " | 🔴 | Created ohos_abi utility function in OHOS module | ~204 |
 | #2911 | " | 🟣 | Created OHOS tooling detection module | ~235 |

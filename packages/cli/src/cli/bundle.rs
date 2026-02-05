@@ -96,10 +96,12 @@ impl Bundle {
                 bundles.push(aab);
             }
 
-            // OHOS bundling uses the unified build command with platform flag
             BundleFormat::Ohos => {
-                tracing::warn!("OHOS bundles should be created with `dx build --platform ohos`.");
-                bundles.push(client.root_dir());
+                let hap = client
+                    .ohos_hvigor_bundle()
+                    .await
+                    .context("Failed to run hvigor assembleHap")?;
+                bundles.push(hap);
             }
         };
 

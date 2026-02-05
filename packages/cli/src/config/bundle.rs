@@ -30,6 +30,8 @@ pub(crate) struct BundleConfig {
     pub(crate) windows: Option<WindowsSettings>,
     #[serde(default)]
     pub(crate) android: Option<AndroidSettings>,
+    #[serde(default)]
+    pub(crate) ohos: Option<OhosSettings>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -276,6 +278,15 @@ pub(crate) struct AndroidSettings {
     pub(crate) jks_password: String,
     pub(crate) key_alias: String,
     pub(crate) key_password: String,
+}
+
+// OpenHarmony signing settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct OhosSettings {
+    pub(crate) p12_file: PathBuf,
+    pub(crate) p12_password: String,
+    pub(crate) key_alias: String,
+    pub(crate) profile_file: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

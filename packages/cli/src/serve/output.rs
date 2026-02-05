@@ -582,6 +582,7 @@ impl Output {
             BuildStage::CompressingAssets => lines.push("Compressing assets".yellow()),
             BuildStage::RunningBindgen => lines.push("Running wasm-bindgen".yellow()),
             BuildStage::RunningGradle => lines.push("Running gradle assemble".yellow()),
+            BuildStage::RunningHvigor => lines.push("Running hvigor assemble".yellow()),
             BuildStage::CodeSigning => lines.push("Code signing app".yellow()),
             BuildStage::Bundling => lines.push("Bundling app".yellow()),
             BuildStage::CopyingAssets {
