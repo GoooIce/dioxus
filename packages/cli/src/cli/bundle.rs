@@ -96,9 +96,9 @@ impl Bundle {
                 bundles.push(aab);
             }
 
-            // OHOS bundling is handled separately via dx ohos build
+            // OHOS bundling uses the unified build command with platform flag
             BundleFormat::Ohos => {
-                tracing::warn!("OHOS bundles should be created with `dx ohos build`.");
+                tracing::warn!("OHOS bundles should be created with `dx build --platform ohos`.");
                 bundles.push(client.root_dir());
             }
         };
