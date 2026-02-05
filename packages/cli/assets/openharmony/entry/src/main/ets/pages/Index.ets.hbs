@@ -1,0 +1,34 @@
+// Dioxus OpenHarmony Index Page
+// This is a placeholder page. The actual UI is rendered by Dioxus via WebView.
+// The RustAbility from @ohos-rs/ability handles the WebView initialization.
+
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import testNapi from 'libentry.so';
+
+const DOMAIN = 0x0000;
+
+@Entry
+@Component
+struct Index {
+  @State message: string = '{{app_name}}';
+
+  build() {
+    Row() {
+      Column() {
+        Text(this.message)
+          .fontSize($r('app.float.page_text_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .onClick(() => {
+            this.message = 'Dioxus Running!';
+            hilog.info(DOMAIN, 'DioxusTag', 'Dioxus version: %{public}s', testNapi.getVersion());
+          })
+        Text('Powered by Dioxus')
+          .fontSize(16)
+          .margin({ top: 20 })
+          .fontColor('#666666')
+      }
+      .width('100%')
+    }
+    .height('100%')
+  }
+}

@@ -704,6 +704,23 @@ impl AppServer {
             }
         }
 
+        // If the client is running on OHOS, remove the port forwarding using hdc
+        if matches!(self.client.build.bundle, BundleFormat::Ohos) {
+            let hdc = which::which("hdc").unwrap_or_else(|_| std::path::PathBuf::from("hdc"));
+            if let Err(err) = Command::new(&hdc)
+                .arg("fport")
+                .arg("rm")
+                .arg(format!("tcp:{}", self.devserver_port))
+                .output()
+                .await
+            {
+                tracing::error!(
+                    "failed to remove forwarded OHOS port {}: {err}",
+                    self.devserver_port
+                );
+            }
+        }
+
         // force the tailwind watcher to stop - if we don't, it eats our stdin
         self.tw_watcher.abort();
 

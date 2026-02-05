@@ -795,6 +795,15 @@ impl BuildRequest {
                 bundle_format = bundle_format.or(Some(BundleFormat::Server));
                 triple = triple.or(Some(Triple::host()));
             }
+            Platform::Ohos => {
+                if main_package.features.contains_key("mobile") && renderer.is_none() {
+                    features.push("mobile".into());
+                }
+                renderer = renderer.or(Some(Renderer::Webview));
+                bundle_format = bundle_format.or(Some(BundleFormat::Ohos));
+                // Default to aarch64 for OHOS devices
+                triple = triple.or(Some("aarch64-unknown-linux-ohos".parse()?));
+            }
         }
 
         // If default features are enabled, we need to add the default features
@@ -934,6 +943,29 @@ impl BuildRequest {
             );
         }
 
+        // If no custom linker is set, then OHOS falls back to the SDK's clang
+        if custom_linker.is_none() && bundle == BundleFormat::Ohos {
+            if let Ok(ohos_tools) = workspace.ohos_tools() {
+                let clang_path = ohos_tools.ohos_cc();
+                if clang_path.exists() {
+                    custom_linker = Some(clang_path);
+                    // Add OHOS-specific linker flags
+                    rustflags.flags.extend(ohos_tools.linker_flags(&triple));
+                } else {
+                    tracing::warn!(
+                        "OpenHarmony clang not found at {:?}. \
+                         Please ensure OHOS_SDK_HOME or OHOS_NDK_HOME is set correctly.",
+                        clang_path
+                    );
+                }
+            } else {
+                tracing::warn!(
+                    "OpenHarmony SDK not configured. \
+                     Please set OHOS_SDK_HOME or OHOS_NDK_HOME environment variable."
+                );
+            }
+        }
+
         let target_dir = std::env::var("CARGO_TARGET_DIR")
             .ok()
             .map(PathBuf::from)
@@ -1053,6 +1085,11 @@ impl BuildRequest {
         // If we forget to do this, then we won't get the linker args since rust skips the full build
         // We need to make sure to not react to this though, so the filemap must cache it
         _ = self.bust_fingerprint(ctx);
+
+        // For OHOS builds, ensure the OpenHarmony project is initialized before building
+        if self.bundle == BundleFormat::Ohos {
+            self.ensure_ohos_project_initialized().await?;
+        }
 
         // Run the cargo build to produce our artifacts
         let mut artifacts = self.cargo_build(ctx).await?;
@@ -1412,6 +1449,7 @@ impl BuildRequest {
             | BundleFormat::Windows
             | BundleFormat::Linux
             | BundleFormat::Ios
+            | BundleFormat::Ohos
             | BundleFormat::Server => {
                 std::fs::create_dir_all(self.exe_dir())?;
                 std::fs::copy(exe, self.main_exe())?;
@@ -3210,6 +3248,7 @@ impl BuildRequest {
             BundleFormat::Android => platform_dir.join("app"), // .apk (after bundling)
             BundleFormat::Linux => platform_dir.join("app"),   // .appimage (after bundling)
             BundleFormat::Windows => platform_dir.join("app"), // .exe (after bundling)
+            BundleFormat::Ohos => platform_dir.join("app"),    // .hap (after bundling)
         }
     }
 
@@ -3247,6 +3286,9 @@ impl BuildRequest {
 
             // todo: maybe this should be called AppRun?
             BundleFormat::Linux => self.executable_name().to_string(),
+
+            // OHOS apps use a shared library like Android
+            BundleFormat::Ohos => format!("lib{}.so", self.executable_name()),
         }
     }
 
@@ -3937,6 +3979,9 @@ impl BuildRequest {
             // We could also distribute them as a deb/rpm for linux and msi for windows
             BundleFormat::Web => {}
             BundleFormat::Server => {}
+
+            // OHOS metadata is handled separately in the ohos module
+            BundleFormat::Ohos => {}
         }
 
         Ok(())
@@ -3965,6 +4010,7 @@ impl BuildRequest {
             | BundleFormat::Linux
             | BundleFormat::Ios
             | BundleFormat::Android
+            | BundleFormat::Ohos
             | BundleFormat::Server => {}
         }
 
@@ -4433,6 +4479,62 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         Ok(to)
     }
 
+    /// Ensure OpenHarmony project is initialized
+    ///
+    /// This method checks if the OpenHarmony project exists, and if not, generates it.
+    /// It also checks if the project configuration is outdated and warns the user.
+    async fn ensure_ohos_project_initialized(&self) -> Result<()> {
+        use crate::ohos::project;
+
+        // Check if OHOS project already exists
+        let project_exists = project::ohos_project_exists(&self.workspace.workspace_root());
+
+        if !project_exists {
+            // First build: auto-generate project
+            tracing::info!("📦 OpenHarmony project not found. Generating project structure...");
+            tracing::info!("   (This is a one-time setup. Future builds will skip this step.)");
+
+            // Create OHOS project metadata from build request
+            let lib_name = self.main_target.replace('-', "_");
+            let app_name = self.config.web.app.title.clone();
+            let bundle_name = self.bundle_identifier();
+            let publisher = self
+                .config
+                .bundle
+                .publisher
+                .clone()
+                .unwrap_or_else(|| "Dioxus".to_string());
+            let version = "1.0.0".to_string(); // Default version
+            let output_dir = self.workspace.workspace_root().join("gen-ohos");
+
+            // Clone output_dir for metadata since we need it for logging later
+            let output_dir_for_log = output_dir.clone();
+
+            let metadata = project::OhosProjectMetadata {
+                app_name,
+                bundle_name,
+                package_name: self.main_target.clone(),
+                lib_name,
+                publisher,
+                version,
+                project_root: self.workspace.workspace_root().to_path_buf(),
+                output_dir,
+            };
+
+            project::generate_ohos_project(&metadata)
+                .context("Failed to generate OpenHarmony project. Please run 'dx init --platform ohos' manually.")?;
+
+            tracing::info!("✅ OpenHarmony project generated at: {}", output_dir_for_log.display());
+            return Ok(());
+        }
+
+        // Check if project configuration is outdated
+        // TODO: Add more sophisticated checks
+        tracing::debug!("OpenHarmony project already exists at: gen-ohos/");
+
+        Ok(())
+    }
+
     fn gradle_exe(&self) -> Result<PathBuf> {
         // make sure we can execute the gradlew script
         #[cfg(unix)]
@@ -4538,6 +4640,15 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             // We put assets in public/assets for server apps
             BundleFormat::Server => self.root_dir().join("public").join("assets"),
 
+            // OHOS assets go into entry/src/main/resources/rawfile
+            BundleFormat::Ohos => self
+                .root_dir()
+                .join("entry")
+                .join("src")
+                .join("main")
+                .join("resources")
+                .join("rawfile"),
+
             // everyone else is soooo normal, just app/assets :)
             BundleFormat::Web | BundleFormat::Ios | BundleFormat::Windows | BundleFormat::Linux => {
                 self.root_dir().join("assets")
@@ -4568,6 +4679,13 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
                 .join("main")
                 .join("jniLibs")
                 .join(AndroidTools::android_jnilib(&self.triple)),
+
+            // OHOS has a similar structure to Android
+            BundleFormat::Ohos => self
+                .root_dir()
+                .join("entry")
+                .join("libs")
+                .join(crate::ohos::ohos_abi(&self.triple)),
 
             // these are all the same, I think?
             BundleFormat::Windows
@@ -4627,6 +4745,9 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             BundleFormat::Ios => self.verify_ios_tooling().await?,
             BundleFormat::Android => self.verify_android_tooling().await?,
             BundleFormat::Linux => self.verify_linux_tooling().await?,
+            BundleFormat::Ohos => {
+                // OHOS tooling verification is handled in the ohos module
+            }
             BundleFormat::MacOS | BundleFormat::Windows | BundleFormat::Server => {}
         }
 

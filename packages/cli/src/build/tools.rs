@@ -357,3 +357,31 @@ fn var_or_debug(name: &str) -> Option<PathBuf> {
         .ok()
         .map(PathBuf::from)
 }
+
+/// Get OpenHarmony tools if available.
+///
+/// This function checks for the OpenHarmony SDK/NDK and returns the tooling
+/// configuration if found. It looks for the SDK in environment variables
+/// (OHOS_SDK_HOME, OHOS_NDK_HOME) or default DevEco Studio locations.
+pub fn get_ohos_tools() -> Option<Arc<crate::ohos::OhosTooling>> {
+    static OHOS_TOOLS: std::sync::OnceLock<Option<Arc<crate::ohos::OhosTooling>>> =
+        std::sync::OnceLock::new();
+
+    OHOS_TOOLS
+        .get_or_init(|| {
+            let tooling = crate::ohos::check_tools().ok()?;
+
+            // Verify the NDK path has the expected structure
+            let clang = tooling.ohos_cc();
+            if !clang.exists() {
+                tracing::debug!(
+                    "OpenHarmony clang not found at {:?}. OHOS builds may not work properly.",
+                    clang
+                );
+                // Still return the tooling - it might work if clang is in PATH
+            }
+
+            Some(Arc::new(tooling))
+        })
+        .clone()
+}

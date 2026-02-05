@@ -95,6 +95,12 @@ impl Bundle {
                     .context("Failed to run gradle bundleRelease")?;
                 bundles.push(aab);
             }
+
+            // OHOS bundling is handled separately via dx ohos build
+            BundleFormat::Ohos => {
+                tracing::warn!("OHOS bundles should be created with `dx ohos build`.");
+                bundles.push(client.root_dir());
+            }
         };
 
         // Copy the bundles to the output directory if one was specified

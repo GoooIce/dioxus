@@ -607,6 +607,12 @@ impl AppBuilder {
             | BundleFormat::MacOS
             | BundleFormat::Windows
             | BundleFormat::Linux => self.open_with_main_exe(envs, args)?,
+
+            // OHOS apps are deployed and launched via hdc
+            BundleFormat::Ohos => {
+                self.open_ohos(devserver_ip, envs, self.build.device_name.clone())
+                    .await?;
+            }
         };
 
         self.builds_opened += 1;
@@ -1393,6 +1399,176 @@ impl AppBuilder {
         Ok(())
     }
 
+    /// Launch the OpenHarmony application on a connected device.
+    ///
+    /// This function handles the process of installing the HAP package, forwarding the development
+    /// server port using `hdc`, and launching the application on the device.
+    ///
+    /// The following `hdc` commands are executed:
+    ///
+    /// 1. **Port Forwarding**:
+    ///    - `hdc fport tcp:<port> tcp:<port>`: Forwards the development server port from the host
+    ///      machine to the OHOS device, enabling communication between the app and the dev server.
+    ///
+    /// 2. **HAP Installation**:
+    ///    - `hdc install <hap_path>`: Installs the HAP package onto the OHOS device.
+    ///
+    /// 3. **App Launch**:
+    ///    - `hdc shell aa start -a EntryAbility -b <bundle_name>`: Launches the app on the device.
+    ///
+    /// # Notes
+    ///
+    /// - This function requires the OHOS SDK tools (`hdc`) to be available in the system's PATH.
+    /// - Unlike Android's `adb reverse`, OHOS uses `hdc fport` for port forwarding.
+    async fn open_ohos(
+        &mut self,
+        devserver_socket: SocketAddr,
+        envs: Vec<(String, String)>,
+        device: Option<String>,
+    ) -> Result<()> {
+        let hap_path = self
+            .build
+            .root_dir()
+            .join("entry")
+            .join("build")
+            .join("default")
+            .join("outputs")
+            .join("default")
+            .join("entry-default-signed.hap");
+
+        let bundle_name = self.build.bundle_identifier();
+        let (stdout_tx, stdout_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
+        // Check if hdc is available
+        let hdc_path = which::which("hdc").unwrap_or_else(|_| PathBuf::from("hdc"));
+
+        let task = tokio::task::spawn(async move {
+            // Get device specifier if a specific device was requested
+            let mut device_args = vec![];
+            if let Some(ref dev) = device {
+                device_args.push("-t".to_string());
+                device_args.push(dev.clone());
+            }
+
+            // Port forwarding using hdc fport (forward port)
+            let port = devserver_socket.port();
+            let fport_result = Command::new(&hdc_path)
+                .args(&device_args)
+                .arg("fport")
+                .arg(format!("tcp:{port}"))
+                .arg(format!("tcp:{port}"))
+                .output()
+                .await;
+
+            if let Err(e) = fport_result {
+                tracing::error!("Failed to forward port {port} using hdc: {e}");
+            }
+
+            // Install the HAP package
+            let install_result = Command::new(&hdc_path)
+                .args(&device_args)
+                .arg("install")
+                .arg(&hap_path)
+                .output()
+                .await;
+
+            match install_result {
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    if !stderr.is_empty() && !stderr.contains("success") {
+                        tracing::error!("Failed to install HAP: {stderr}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to execute hdc install: {e}");
+                }
+            }
+
+            // Write env vars to device (similar to Android pattern)
+            // OHOS uses a different cache location
+            let session_cache = std::env::temp_dir().join("dioxus-ohos-cache");
+            let env_file = session_cache.join(".env");
+            _ = std::fs::create_dir_all(&session_cache);
+            _ = std::fs::write(
+                &env_file,
+                envs.iter()
+                    .map(|(key, value)| format!("{key}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+
+            // Push env file to device cache
+            let device_cache = "/data/local/tmp/dioxus-cache";
+            _ = Command::new(&hdc_path)
+                .args(&device_args)
+                .arg("shell")
+                .arg("mkdir")
+                .arg("-p")
+                .arg(device_cache)
+                .output()
+                .await;
+
+            _ = Command::new(&hdc_path)
+                .args(&device_args)
+                .arg("file")
+                .arg("send")
+                .arg(&env_file)
+                .arg(format!("{device_cache}/.env"))
+                .output()
+                .await;
+
+            // Launch the app using aa (ability assistant)
+            // hdc shell aa start -a EntryAbility -b <bundle_name>
+            let launch_result = Command::new(&hdc_path)
+                .args(&device_args)
+                .arg("shell")
+                .arg("aa")
+                .arg("start")
+                .arg("-a")
+                .arg("EntryAbility")
+                .arg("-b")
+                .arg(&bundle_name)
+                .output()
+                .await;
+
+            match launch_result {
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    if !stderr.is_empty() && stderr.contains("error") {
+                        tracing::error!("Failed to start app: {stderr}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to execute hdc shell aa start: {e}");
+                }
+            }
+
+            // Start log capture
+            let mut child = Command::new(&hdc_path)
+                .args(&device_args)
+                .arg("hilog")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()?;
+
+            let stdout = child.stdout.take().unwrap();
+            let mut reader = BufReader::new(stdout).lines();
+
+            while let Ok(Some(line)) = reader.next_line().await {
+                _ = stdout_tx.send(line);
+            }
+
+            Ok::<(), Error>(())
+        });
+
+        self.spawn_handle = Some(task);
+        // Reuse the Android logcat field for OHOS logs since the structure is similar
+        self.adb_logcat_stdout = Some(UnboundedReceiverStream::new(stdout_rx));
+
+        Ok(())
+    }
+
     fn make_entropy_path(exe: &PathBuf) -> PathBuf {
         let id = uuid::Uuid::new_v4();
         let name = id.to_string();
@@ -1418,9 +1594,11 @@ impl AppBuilder {
         // The requirement here is based on the platform, not necessarily our current architecture.
         let requires_entropy = match self.build.bundle {
             // When running "bundled", we don't need entropy
-            BundleFormat::Web | BundleFormat::MacOS | BundleFormat::Ios | BundleFormat::Android => {
-                false
-            }
+            BundleFormat::Web
+            | BundleFormat::MacOS
+            | BundleFormat::Ios
+            | BundleFormat::Android
+            | BundleFormat::Ohos => false,
 
             // But on platforms that aren't running as "bundled", we do.
             BundleFormat::Windows | BundleFormat::Linux | BundleFormat::Server => true,
@@ -1646,6 +1824,12 @@ impl AppBuilder {
                 .lines()
                 .map(|line| line.trim())
                 .join("")
+            }
+
+            // OHOS debugging not yet supported
+            BundleFormat::Ohos => {
+                tracing::warn!("OHOS debugging is not yet supported");
+                return Ok(());
             }
         };
 
