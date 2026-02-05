@@ -173,6 +173,10 @@ home = "=0.5.11"
 [target.'cfg(target_env = "musl")'.dependencies]
 git2 = { version = "0.20.2", features = ["vendored-libgit2"] }
 
+# OpenHarmony (OHOS) platform support - cargo-mobile2
+[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "windows", target_os = "macos"))'.dependencies]
+cargo-mobile2 = { git = "https://github.com/tauri-apps/cargo-mobile2", branch = "feat/ohos", default-features = false }
+
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }
 
@@ -181,6 +185,9 @@ default = []
 tokio-console = ["dep:console-subscriber", "tokio/tracing"]
 no-downloads = []
 disable-telemetry = []
+# TLS features for cargo-mobile2
+native-tls = ["cargo-mobile2/native-tls"]
+rustls = ["cargo-mobile2/rustls"]
 
 [[bin]]
 path = "src/main.rs"
