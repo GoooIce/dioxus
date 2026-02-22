@@ -1,0 +1,86 @@
+{
+  "analysis_date": "2026-02-20",
+  "test_file": "packages/ssr/tests/simple.rs",
+  "implementation_file": ".test-enhancer/implementations/ssr-simple.impl.rs",
+  "summary": {
+    "original_lines": 87,
+    "agent_lines": 136,
+    "code_density_diff": "+57 lines (mostly comments)"
+  },
+  "differences": [
+    {
+      "test": "simple",
+      "type": "style",
+      "severity": "low",
+      "description": "Agent 添加了中间变量和详细注释，代码更冗长但功能等效",
+      "original_pattern": "直接在 assert_eq! 中使用 rsx!",
+      "agent_pattern": "提取 element 和 html 中间变量"
+    },
+    {
+      "test": "lists",
+      "type": "style",
+      "severity": "low",
+      "description": "与 simple 测试相同的模式差异",
+      "original_pattern": "内联 rsx! 宏",
+      "agent_pattern": "中间变量模式"
+    },
+    {
+      "test": "dynamic",
+      "type": "syntax",
+      "severity": "high",
+      "description": "rsx! 宏中的字符串语法差异可能导致渲染结果不同",
+      "original_pattern": "\"Hello world 1 -->\" \"{dynamic}\" \"<-- Hello world 2\"",
+      "agent_pattern": "\"Hello world 1 --\" {dynamic} \"<-- Hello world 2\"",
+      "note": "原始测试中 --> 和 <-- 是静态字符串的一部分，Agent 修改了箭头符号并可能改变了动态插值方式"
+    },
+    {
+      "test": "components",
+      "type": "syntax",
+      "severity": "low",
+      "description": "Props 传递语法的简写形式",
+      "original_pattern": "MyComponent { name: name }",
+      "agent_pattern": "MyComponent { name }",
+      "note": "两者功能等效，Agent 使用了字段简写语法"
+    },
+    {
+      "test": "fragments",
+      "type": "syntax",
+      "severity": "medium",
+      "description": "空 Fragment 的表示方式差异",
+      "original_pattern": "rsx! ({} )",
+      "agent_pattern": "rsx! {}",
+      "note": "括号可能有语义差异，需要验证渲染结果是否一致"
+    }
+  ],
+  "knowledge_gaps": [
+    {
+      "id": 1,
+      "category": "rsx! 宏语法",
+      "description": "Agent 对 rsx! 宏中静态字符串字面量与动态插值的语法边界理解不完整",
+      "example": "原始测试中 \"-->\" 和 \"<--\" 是静态字符串，不是动态插值的一部分"
+    },
+    {
+      "id": 2,
+      "category": "Fragment 语法",
+      "description": "空 Fragment 的精确语法表示（带括号 vs 不带括号）",
+      "impact": "可能导致渲染行为差异"
+    },
+    {
+      "id": 3,
+      "category": "代码风格偏好",
+      "description": "Agent 倾向于添加详细的中文注释和中间变量，这可能不是项目的首选风格",
+      "note": "原始代码更紧凑，符合 Rust 测试的简洁风格"
+    }
+  ],
+  "recommendations": [
+    "验证 dynamic 测试中箭头符号的修改是否会影响测试通过",
+    "确认 fragments 测试中括号差异的语义影响",
+    "考虑调整代码风格以匹配项目的简洁测试风格",
+    "在注释中使用英文而非中文，以保持代码库的一致性"
+  ],
+  "accuracy_estimate": {
+    "functional_correctness": 0.85,
+    "syntax_precision": 0.70,
+    "style_match": 0.50
+  }
+}

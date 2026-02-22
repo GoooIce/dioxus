@@ -1,0 +1,253 @@
+{
+  "file": "packages/ssr/tests/hydration.rs",
+  "analysis_date": "2026-02-20",
+  "agent": "differ",
+  "summary": {
+    "original_tests": 6,
+    "agent_tests": 6,
+    "coverage_percentage": 100
+  },
+  "test_comparisons": [
+    {
+      "test_name": "root_ids",
+      "status": "different_implementation",
+      "differences": [
+        {
+          "aspect": "API usage",
+          "original": "dioxus_core::NoOpMutations",
+          "agent": "vdom.rebuild() without mutations"
+        },
+        {
+          "aspect": "rendering function",
+          "original": "dioxus_ssr::pre_render(&dom)",
+          "agent": "dioxus_ssr::render(&vdom)"
+        },
+        {
+          "aspect": "assertion style",
+          "original": "assert_eq! with exact HTML match",
+          "agent": "assert! with contains check"
+        },
+        {
+          "aspect": "rsx syntax",
+          "original": "width: \"100px\" (attribute shorthand)",
+          "agent": "style: \"width:100px;\" (inline style)"
+        }
+      ]
+    },
+    {
+      "test_name": "dynamic_attributes",
+      "status": "different_implementation",
+      "differences": [
+        {
+          "aspect": "API usage",
+          "original": "dioxus_core::NoOpMutations",
+          "agent": "vdom.rebuild() without mutations"
+        },
+        {
+          "aspect": "rendering function",
+          "original": "dioxus_ssr::pre_render(&dom)",
+          "agent": "dioxus_ssr::render(&vdom)"
+        },
+        {
+          "aspect": "assertion style",
+          "original": "assert_eq! with exact HTML match",
+          "agent": "assert! with contains check"
+        },
+        {
+          "aspect": "rsx syntax",
+          "original": "width: \"{dynamic}px\"",
+          "agent": "style: \"{dynamic}px\""
+        }
+      ]
+    },
+    {
+      "test_name": "listeners",
+      "status": "different_implementation",
+      "differences": [
+        {
+          "aspect": "API usage",
+          "original": "dioxus_core::NoOpMutations",
+          "agent": "vdom.rebuild() without mutations"
+        },
+        {
+          "aspect": "rendering function",
+          "original": "dioxus_ssr::pre_render(&dom)",
+          "agent": "dioxus_ssr::render(&vdom)"
+        },
+        {
+          "aspect": "assertion style",
+          "original": "assert_eq! with exact HTML match",
+          "agent": "assert! with contains check"
+        }
+      ]
+    },
+    {
+      "test_name": "text_nodes",
+      "status": "different_implementation",
+      "differences": [
+        {
+          "aspect": "variable naming",
+          "original": "dynamic_text",
+          "agent": "name"
+        },
+        {
+          "aspect": "API usage",
+          "original": "dioxus_core::NoOpMutations",
+          "agent": "vdom.rebuild() without mutations"
+        },
+        {
+          "aspect": "rendering function",
+          "original": "dioxus_ssr::pre_render(&dom)",
+          "agent": "dioxus_ssr::render(&vdom)"
+        },
+        {
+          "aspect": "assertion style",
+          "original": "assert_eq! with exact HTML match",
+          "agent": "assert! with contains check"
+        }
+      ]
+    },
+    {
+      "test_name": "components_hydrate",
+      "status": "different_implementation",
+      "differences": [
+        {
+          "aspect": "component definition style",
+          "original": "nested fn inside test (no #[component] attribute)",
+          "agent": "uses #[component] attribute in subtests"
+        },
+        {
+          "aspect": "Child4 test",
+          "original": "uses for loop with rsx! macro returning {rsx! { \"{1}\" }}",
+          "agent": "uses (0..2).map with div elements"
+        },
+        {
+          "aspect": "API usage",
+          "original": "dioxus_core::NoOpMutations",
+          "agent": "vdom.rebuild() without mutations"
+        },
+        {
+          "aspect": "rendering function",
+          "original": "dioxus_ssr::pre_render(&dom)",
+          "agent": "dioxus_ssr::render(&vdom)"
+        },
+        {
+          "aspect": "assertion style",
+          "original": "assert_eq! with exact HTML match",
+          "agent": "assert! with contains check"
+        }
+      ]
+    },
+    {
+      "test_name": "hello_world_hydrates",
+      "status": "different_implementation",
+      "differences": [
+        {
+          "aspect": "component structure",
+          "original": "app() function directly uses hooks, no component wrapper",
+          "agent": "wraps in Counter component with #[component]"
+        },
+        {
+          "aspect": "VirtualDom initialization",
+          "original": "VirtualDom::new(app)",
+          "agent": "VirtualDom::new(|| rsx! { Counter {} })"
+        },
+        {
+          "aspect": "API usage",
+          "original": "dioxus_core::NoOpMutations",
+          "agent": "vdom.rebuild() without mutations"
+        },
+        {
+          "aspect": "rendering function",
+          "original": "dioxus_ssr::pre_render(&dom)",
+          "agent": "dioxus_ssr::render(&vdom)"
+        },
+        {
+          "aspect": "assertion style",
+          "original": "assert_eq! with exact HTML match",
+          "agent": "assert! with contains check"
+        }
+      ]
+    }
+  ],
+  "knowledge_gaps": [
+    {
+      "id": "KG001",
+      "category": "API",
+      "severity": "high",
+      "description": "Agent did not use dioxus_core::NoOpMutations",
+      "impact": "The original tests pass NoOpMutations to rebuild() which is the correct API for collecting mutations without applying them",
+      "evidence": "All original tests use dom.rebuild(&mut dioxus_core::NoOpMutations), agent uses vdom.rebuild()"
+    },
+    {
+      "id": "KG002",
+      "category": "API",
+      "severity": "high",
+      "description": "Agent used wrong SSR rendering function",
+      "impact": "The original tests use dioxus_ssr::pre_render() which is specifically for hydration, agent used dioxus_ssr::render()",
+      "evidence": "All original tests use dioxus_ssr::pre_render(&dom), agent uses dioxus_ssr::render(&vdom)"
+    },
+    {
+      "id": "KG003",
+      "category": "rsx-syntax",
+      "severity": "medium",
+      "description": "Agent used inline style syntax instead of attribute shorthand",
+      "impact": "Different rsx syntax for styles - original uses width: \"100px\", agent uses style: \"width:100px;\"",
+      "evidence": "root_ids test: original has width: \"100px\", agent has style: \"width:100px;\""
+    },
+    {
+      "id": "KG004",
+      "category": "component-structure",
+      "severity": "medium",
+      "description": "Agent added #[component] attribute where original didn't use it",
+      "impact": "Original tests define plain functions without #[component], agent adds #[component]",
+      "evidence": "components_hydrate test: original uses fn Child() -> Element, agent uses #[component] fn Child() -> Element"
+    },
+    {
+      "id": "KG005",
+      "category": "assertion-style",
+      "severity": "medium",
+      "description": "Agent changed from exact HTML matching to contains-based assertions",
+      "impact": "Original uses assert_eq! for exact HTML verification, agent uses assert! with contains() for partial matching",
+      "evidence": "All tests: original uses assert_eq!(dioxus_ssr::pre_render(&dom), r#\"...\"#)"
+    },
+    {
+      "id": "KG006",
+      "category": "hooks-usage",
+      "severity": "medium",
+      "description": "Agent didn't understand hooks must be called in component context",
+      "impact": "hello_world_hydrates: original calls use_signal directly in app(), agent wraps in Counter component",
+      "evidence": "hello_world_hydrates test structure differs significantly"
+    },
+    {
+      "id": "KG007",
+      "category": "for-loop-syntax",
+      "severity": "medium",
+      "description": "Agent used different for loop iteration pattern",
+      "impact": "Child4 test: original uses for _ in 0..2 { {rsx! { \"{1}\" }} }, agent uses (0..2).map with div wrapper",
+      "evidence": "components_hydrate test Child4 has different iteration structure"
+    }
+  ],
+  "potential_issues": [
+    {
+      "issue": "Agent tests may not compile due to API mismatches",
+      "reason": "dioxus_ssr::render() may not exist or have different signature than dioxus_ssr::pre_render()"
+    },
+    {
+      "issue": "Agent tests may not properly test hydration",
+      "reason": "Using contains() instead of exact match may miss important hydration markers"
+    },
+    {
+      "issue": "rebuild() without NoOpMutations may not work as expected",
+      "reason": "NoOpMutations is specifically designed for testing scenarios"
+    }
+  ],
+  "recommendations": [
+    "Agent should study dioxus_core::NoOpMutations API and its purpose",
+    "Agent should understand difference between render() and pre_render() in SSR context",
+    "Agent should preserve exact HTML matching assertions for hydration tests",
+    "Agent should learn rsx attribute shorthand syntax (width: \"100px\") vs inline style syntax",
+    "Agent should understand when #[component] is needed vs plain functions",
+    "Agent should understand hooks context requirements in Dioxus"
+  ]
+}

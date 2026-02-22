@@ -1,0 +1,111 @@
+{
+  "file": "memo.rs",
+  "passed": false,
+  "issues": [
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 使用了过时的 Scope-based hook API。当前 dioxus-signals 的 use_signal 和 use_memo 不再接受 Scope 参数，而是直接使用 use_hook 内部获取 scope。",
+      "original_code": "use dioxus::prelude::*;\n...\nlet mut signal = use_signal(|| 0);\nlet memo = use_memo(move || {\n    counter.borrow_mut().effect += 1;\n    println!(\"Signal: {:?}\", signal);\n    signal()\n});\nassert_eq!(memo(), 0);",
+      "agent_code": "fn app(cx: Scope<Rc<RefCell<RunCounter>>>) -> Element {\n    ...\n    let mut signal = use_signal(cx, || 0);\n    let memo = use_memo(cx, move |_| {\n        cx.borrow_mut().effect += 1;\n        signal.get()\n    });\n    assert_eq!(memo.current(), 0, ...);\n}",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 使用了错误的 Signal/Memo 读取方法。正确的 API 是直接调用 signal() 或 memo()，而非 signal.get() 或 memo.current()。",
+      "original_code": "assert_eq!(memo(), 0);\nsignal += 1;\nassert_eq!(memo(), 1);",
+      "agent_code": "assert_eq!(memo.current(), 0, \"初始 memo 值应为 0\");\nsignal += 1;\nassert_eq!(memo.current(), 1, \"递增后 memo 值应为 1\");",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 使用了 render! 宏，这是过时的 API。当前应使用 rsx! 宏。",
+      "original_code": "rsx! {\n    div {}\n}",
+      "agent_code": "render!(\"div\")",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 使用了 cx.generation()，但正确的方式是使用 dioxus_core::generation() 函数。",
+      "original_code": "use dioxus_core::{generation};\n...\nif generation() == 1 {\n    *signal.write() = 0;\n}",
+      "agent_code": "match cx.generation() {\n    1 => {\n        signal.set(0);\n    }\n    ...\n}",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 使用了 signal.set() 方法，但当前 API 使用 *signal.write() = value 或 signal += 1 等操作符重载。",
+      "original_code": "*signal.write() = 0;\nsignal += 1;",
+      "agent_code": "signal.set(0);",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 使用了 signal.read() 方法，但当前 API 直接使用 signal() 调用。",
+      "original_code": "signal()",
+      "agent_code": "*cx.signal.read()",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "Agent 对 signal 使用了 Rc<Signal<usize>> 包装，这是不必要的。Signal 本身已经是 Copy 类型。",
+      "original_code": "signal: Signal<usize>,",
+      "agent_code": "signal: Rc<Signal<usize>>,",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "render_immediate 的签名已变更，现在需要传入 mutations 参数如 &mut NoOpMutations，而非无参数调用。",
+      "original_code": "dom.render_immediate(&mut NoOpMutations);",
+      "agent_code": "dom.render_immediate();",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "syntax_correctness",
+      "severity": "error",
+      "description": "Agent 在测试中嵌套定义组件函数，这会导致作用域和生命周期问题。原始测试正确地将组件定义在测试函数外部。",
+      "original_code": "// Child 组件在测试函数外部定义\nfn Child(props: ChildProps) -> Element { ... }\n\n#[test]\nfn memos_prevents_component_rerun() { ... }",
+      "agent_code": "// Child 组件在测试函数内部定义\n#[test]\nfn memos_prevents_component_rerun() {\n    fn Child(cx: Scope<ChildProps>) -> Element { ... }\n}",
+      "enhancement_suggestion": "skill"
+    },
+    {
+      "type": "dependency",
+      "severity": "error",
+      "description": "Agent 未导入必要的类型：dioxus_core::{generation, NoOpMutations}、dioxus_signals::* 等。",
+      "original_code": "use dioxus::prelude::*;\nuse dioxus_core::{generation, ElementId, NoOpMutations};\nuse dioxus_signals::*;",
+      "agent_code": "use dioxus::prelude::*;",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "dependency",
+      "severity": "warning",
+      "description": "Agent 导入了 Arc 但使用场景中原始代码使用的是 Rc。在单线程环境下应使用 Rc。",
+      "original_code": "use std::rc::Rc;",
+      "agent_code": "use std::sync::Arc;",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "pattern_understanding",
+      "severity": "error",
+      "description": "Agent 未理解 to_owned! 宏的作用，这是一个关键的宏用于在闭包中捕获变量。",
+      "original_code": "let memo = use_memo({\n    to_owned![counter];\n    move || {\n        counter.borrow_mut().effect += 1;\n        println!(\"Signal: {:?}\", signal);\n        signal()\n    }\n});",
+      "agent_code": "let memo = use_memo(cx, move |_| {\n    cx.borrow_mut().effect += 1;\n    signal.get()\n});",
+      "enhancement_suggestion": "skill"
+    },
+    {
+      "type": "pattern_understanding",
+      "severity": "error",
+      "description": "Agent 未理解 Props 派生宏的正确用法。原始代码使用 #[derive(Props, Clone)] 并手动实现 PartialEq。",
+      "original_code": "#[derive(Default, Props, Clone)]\nstruct ChildProps {\n    signal: Signal<usize>,\n    counter: Rc<RefCell<RunCounter>>,\n}\n\nimpl PartialEq for ChildProps {\n    fn eq(&self, other: &Self) -> bool {\n        self.signal == other.signal\n    }\n}",
+      "agent_code": "#[derive(PartialEq, Props)]\nstruct ChildProps {\n    signal: Rc<Signal<usize>>,\n    counter: Rc<RefCell<ChildCounter>>,\n}",
+      "enhancement_suggestion": "skill"
+    }
+  ],
+  "summary": "Agent 实现存在多个严重的 API 使用错误。主要问题包括：1) 使用了过时的 Scope-based hook API (use_signal(cx, ...)) 而非当前的无参版本；2) 使用了错误的信号读取方法 (.current(), .get(), .read() 而非直接调用)；3) 使用了过时的 render! 宏而非 rsx!；4) 缺少关键的 to_owned! 宏使用；5) 组件嵌套定义导致作用域问题；6) Props 派生和 PartialEq 实现不正确。建议增强 dioxus-signals hook API 和 dioxus 组件模式相关的 skill。"
+}

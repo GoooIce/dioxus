@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-02-20T22:55:00+08:00",
+  "phase": "Phase 2 - hooks, router, ssr packages",
+  "test_files_analyzed": 9,
+  "summary": {
+    "total_tests": 60,
+    "perfect_matches": 2,
+    "partial_matches": 5,
+    "failed": 2,
+    "issues_found": 47,
+    "by_severity": {
+      "critical": 12,
+      "error": 18,
+      "warning": 10,
+      "info": 7
+    },
+    "by_category": {
+      "api_usage": 22,
+      "pattern_understanding": 12,
+      "syntax_correctness": 8,
+      "dependency": 5
+    }
+  },
+  "package_results": {
+    "hooks": {
+      "files": ["effect.rs", "memo.rs"],
+      "tests": 12,
+      "issues": 16,
+      "key_gaps": [
+        "tokio::select! 和超时处理",
+        "VirtualDom::wait_for_work() API",
+        "use_future 闭包语法",
+        "SyncStorage 类型参数",
+        "RefCell API (无 set 方法)",
+        "Signal 调用语法"
+      ]
+    },
+    "router": {
+      "files": ["parent.rs", "site_map.rs", "link.rs", "outlet.rs"],
+      "tests": 25,
+      "issues": 15,
+      "key_gaps": [
+        "组件与 Props 的关系",
+        "PhantomData 类型标记",
+        "嵌套路由语法 (#[child] vs #[nest])",
+        "Routable trait 约束"
+      ]
+    },
+    "ssr": {
+      "files": ["simple.rs", "escape.rs", "hydration.rs"],
+      "tests": 23,
+      "issues": 16,
+      "key_gaps": [
+        "NoOpMutations API",
+        "pre_render() vs render()",
+        "rsx 属性简写语法",
+        "hooks 上下文要求"
+      ]
+    }
+  },
+  "knowledge_gaps_summary": [
+    {
+      "area": "Dioxus Hooks API",
+      "count": 8,
+      "examples": [
+        "use_future 闭包语法应为 `move || async move { }`",
+        "use_effect 中的 Signal 订阅机制",
+        "Signal 读取：直接调用 vs .get() 方法"
+      ]
+    },
+    {
+      "area": "Dioxus Router API",
+      "count": 5,
+      "examples": [
+        "嵌套路由使用 #[child(\"/path\")] 语法",
+        "PhantomData<R> 用于运行时类型标记",
+        "组件 Props 派生宏用法"
+      ]
+    },
+    {
+      "area": "Dioxus SSR API",
+      "count": 6,
+      "examples": [
+        "dioxus_ssr::pre_render() 用于 hydration 测试",
+        "dioxus_core::NoOpMutations 用于收集 mutations",
+        "rsx 属性简写：width: \"100px\""
+      ]
+    },
+    {
+      "area": "Tokio 异步运行时",
+      "count": 4,
+      "examples": [
+        "tokio::select! 宏用于并发等待",
+        "tokio::time::sleep 配合超时处理",
+        "#[tokio::test] 属性用于异步测试"
+      ]
+    },
+    {
+      "area": "Rust 标准库",
+      "count": 3,
+      "examples": [
+        "RefCell 没有 set() 方法",
+        "const { } 块语法用于常量初始化",
+        "Thread Local 访问模式"
+      ]
+    }
+  ],
+  "recommendations": [
+    "创建 dioxus-async-hooks Hook：涵盖 use_future, use_effect 的闭包语法",
+    "创建 dioxus-router-patterns Skill：涵盖嵌套路由、PhantomData 用法",
+    "创建 dioxus-ssr-testing Hook：涵盖 NoOpMutations, pre_render 用法",
+    "更新 dioxus-signal-read-patterns Hook：添加 SyncStorage 说明"
+  ],
+  "expected_improvement": "当前 0% -> 预期 50%+"
+}

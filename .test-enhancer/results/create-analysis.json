@@ -1,0 +1,87 @@
+{
+  "file": "create.rs",
+  "passed": false,
+  "issues": [
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "ScopeId::APP.mark_dirty() 方法不存在。原始代码使用 dom.mark_dirty(ScopeId::APP)，而 Agent 错误地使用了 ScopeId::APP.mark_dirty()。ScopeId 没有实例方法 mark_dirty，应该调用 VirtualDom 的 mark_dirty 方法。",
+      "original_code": "dom.mark_dirty(ScopeId::APP);\ndom.render_immediate(&mut NoOpMutations);",
+      "agent_code": "ScopeId::APP.mark_dirty();\ndom.render_immediate();",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "render_immediate() API 使用不正确。原始代码使用 dom.render_immediate(&mut NoOpMutations)，传入了一个 NoOpMutations 实例。Agent 使用了无参数版本 dom.render_immediate()。",
+      "original_code": "dom.render_immediate(&mut NoOpMutations);",
+      "agent_code": "dom.render_immediate();",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "warning",
+      "description": "Signal::new 的泛型类型参数问题。原始代码使用 Signal::new(\"hello world\".to_string()) 返回 Signal<String>，Agent 使用 Signal::new(\"hello world\") 这会返回 Signal<&str>。虽然可以工作，但类型语义不同。",
+      "original_code": "Signal::new(\"hello world\".to_string())",
+      "agent_code": "Signal::new(\"hello world\")",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "api_usage",
+      "severity": "error",
+      "description": "generation() 函数未导入。原始代码从 dioxus_core 导入了 generation 函数，用于获取当前生成编号。Agent 的代码中尝试使用 generation 但没有正确的导入。",
+      "original_code": "use dioxus_core::{generation, ElementId, NoOpMutations};\nlet generation = generation();",
+      "agent_code": "use std::cell::Cell;\nlet generation = Cell::new(0usize);\nlet gen = generation.get();",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "syntax_correctness",
+      "severity": "error",
+      "description": "map 迭代器返回类型不匹配。原始代码使用 rsx! { for _ in 0..10 { Child {} } } 生成 VNode，Agent 使用 (0..10).map(|_| rsx! { Child {} }) 这返回 impl Iterator<Item=VNode>，不能直接作为 VirtualDom::new 的返回值。",
+      "original_code": "rsx! {\n    for _ in 0..10 {\n        Child {}\n    }\n}",
+      "agent_code": "(0..10).map(|_| rsx! { Child {} })",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "pattern_understanding",
+      "severity": "warning",
+      "description": "组件定义位置错误。原始代码将 Child 组件定义在闭包外部，作为独立函数。Agent 将 Child 定义为 #[component] 函数放在闭包内部，这会导致生命周期和借用问题。",
+      "original_code": "fn Child() -> Element {\n    let signal = create_without_cx();\n    rsx! { \"{signal}\" }\n}",
+      "agent_code": "let dom = VirtualDom::new(|| {\n    #[component]\n    fn Child() -> Element { ... }\n});",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "dependency",
+      "severity": "error",
+      "description": "缺少 NoOpMutations 导入。原始代码导入了 NoOpMutations 用于 render_immediate 调用。",
+      "original_code": "use dioxus_core::{generation, ElementId, NoOpMutations};",
+      "agent_code": "use dioxus::prelude::*;\nuse std::sync::atomic::{AtomicUsize, Ordering};\nuse std::cell::Cell;",
+      "enhancement_suggestion": "skill"
+    },
+    {
+      "type": "api_usage",
+      "severity": "warning",
+      "description": "使用 #[component] 宏但测试代码中不需要。原始测试使用简单的 fn 定义组件，因为不需要 props 处理。Agent 添加了 #[component] 宏增加了不必要的复杂度。",
+      "original_code": "fn Child() -> Element { ... }",
+      "agent_code": "#[component]\nfn Child() -> Element { ... }",
+      "enhancement_suggestion": "skill"
+    },
+    {
+      "type": "pattern_understanding",
+      "severity": "error",
+      "description": "drop_signals 测试中 generation 变量理解错误。原始代码使用 generation() 函数获取 Dioxus 内部的生成编号，每次 render 会递增。Agent 使用 Cell::new(0) 创建本地变量但从未更新它，导致测试逻辑失效。",
+      "original_code": "let generation = generation();\nlet count = if generation % 2 == 0 { 10 } else { 0 };",
+      "agent_code": "let generation = Cell::new(0usize);\nif gen % 2 == 0 { (0..10).map(...) }",
+      "enhancement_suggestion": "hook"
+    },
+    {
+      "type": "dependency",
+      "severity": "info",
+      "description": "额外导入了 Cell 但这不是正确的解决方案。应该使用 dioxus_core::generation() 函数。",
+      "original_code": "use dioxus_core::{generation, ...};",
+      "agent_code": "use std::cell::Cell;",
+      "enhancement_suggestion": "skill"
+    }
+  ],
+  "summary": "Agent 实现存在多个严重的 API 使用问题：1) ScopeId::APP.mark_dirty() 方法不存在，应该使用 dom.mark_dirty(ScopeId::APP)；2) render_immediate() 缺少 NoOpMutations 参数；3) generation() 函数使用错误，应从 dioxus_core 导入而非使用 Cell；4) map 迭代器返回类型不匹配 RSX 要求；5) 组件定义位置和方式不正确。Agent 对 dioxus-signals 和 VirtualDom 的测试模式理解存在偏差，需要增强对测试 API 的知识。"
+}

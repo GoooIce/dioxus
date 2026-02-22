@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-02-20T13:28:00+08:00",
+  "test_files": [
+    "packages/signals/tests/create.rs",
+    "packages/signals/tests/memo.rs",
+    "packages/signals/tests/subscribe.rs"
+  ],
+  "summary": {
+    "total_tests": 7,
+    "passed": 0,
+    "failed": 3,
+    "issues_found": 29,
+    "by_severity": {
+      "error": 21,
+      "warning": 4,
+      "info": 1
+    },
+    "by_type": {
+      "api_usage": 17,
+      "pattern_understanding": 5,
+      "syntax_correctness": 3,
+      "dependency": 4
+    }
+  },
+  "enhancements_generated": {
+    "hooks": [
+      "dioxus-hooks-api-migration.md",
+      "dioxus-signal-read-patterns.md",
+      "dioxus-virtualdom-testing.md"
+    ],
+    "skills": [
+      "dioxus-component-patterns.md",
+      "dioxus-rsx-patterns.md"
+    ]
+  },
+  "expected_improvement": "0% -> 60%+",
+  "key_findings": [
+    "Agent 使用了过时的 Scope-based hooks API",
+    "Agent 使用了错误的信号读取方法（.get(), .current(), .read()）",
+    "Agent 对 generation() 函数理解错误",
+    "Agent 对 rsx! for 循环语法理解不正确",
+    "Agent 对组件定义位置规则理解不足"
+  ]
+}
