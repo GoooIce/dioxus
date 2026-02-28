@@ -802,6 +802,15 @@ impl BuildRequest {
                     }));
                 }
             }
+            Platform::OpenHarmony => {
+                if main_package.features.contains_key("mobile") && renderer.is_none() {
+                    features.push("mobile".into());
+                }
+
+                renderer = renderer.or(Some(Renderer::Webview));
+                bundle_format = bundle_format.or(Some(BundleFormat::OpenHarmony));
+                triple = triple.or(Some("aarch64-unknown-linux-ohos".parse()?));
+            }
             Platform::Server => {
                 if main_package.features.contains_key("server") && renderer.is_none() {
                     features.push("server".into());
@@ -2084,6 +2093,7 @@ impl BuildRequest {
             | BundleFormat::Windows
             | BundleFormat::Linux
             | BundleFormat::Ios
+            | BundleFormat::OpenHarmony
             | BundleFormat::Server => {
                 std::fs::create_dir_all(self.exe_dir())?;
                 std::fs::copy(exe, self.main_exe())?;
@@ -2198,6 +2208,24 @@ impl BuildRequest {
                     .join("src")
                     .join("main")
                     .join("jniLibs")
+                    .join(arch)
+            }
+            OperatingSystem::Linux if self.bundle == BundleFormat::OpenHarmony => {
+                // OHOS uses similar structure to Android but with entry/libs
+                let arch = match self.triple.architecture {
+                    Architecture::Aarch64(_) => "arm64-v8a",
+                    Architecture::Arm(_) => "armeabi-v7a",
+                    Architecture::X86_32(_) => "x86",
+                    Architecture::X86_64 => "x86_64",
+                    _ => panic!(
+                        "Unsupported architecture for OpenHarmony: {:?}",
+                        self.triple.architecture
+                    ),
+                };
+
+                self.root_dir()
+                    .join("entry")
+                    .join("libs")
                     .join(arch)
             }
             OperatingSystem::Linux | OperatingSystem::Windows => self.root_dir(),
@@ -4064,6 +4092,7 @@ impl BuildRequest {
             BundleFormat::Android => platform_dir.join("app"), // .apk (after bundling)
             BundleFormat::Linux => platform_dir.join("app"),   // .appimage (after bundling)
             BundleFormat::Windows => platform_dir.join("app"), // .exe (after bundling)
+            BundleFormat::OpenHarmony => platform_dir.join("app"), // .hap (after bundling)
         }
     }
 
@@ -4101,6 +4130,9 @@ impl BuildRequest {
 
             // todo: maybe this should be called AppRun?
             BundleFormat::Linux => self.executable_name().to_string(),
+
+            // OpenHarmony uses a shared library similar to Android
+            BundleFormat::OpenHarmony => "libdioxusmain.so".to_string(),
         }
     }
 
@@ -4401,6 +4433,143 @@ impl BuildRequest {
             include_bytes!(
                 "../../assets/android/gen/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp"
             ),
+        )?;
+
+        Ok(())
+    }
+
+    /// Assemble the OpenHarmony app dir.
+    ///
+    /// OHOS uses a similar structure to Android but with different naming:
+    /// - entry/ instead of app/
+    /// - libs/ instead of jniLibs/
+    /// - build/ with default outputs
+    fn build_ohos_app_dir(&self) -> Result<()> {
+        use std::fs::{create_dir_all, write};
+        let root = self.root_dir();
+
+        // OHOS project structure uses "entry" instead of "app"
+        let entry = root.join("entry");
+        let entry_main = entry.join("src").join("main");
+        let entry_ets = entry_main.join("ets");
+        let entry_libs = entry_main.join("libs");
+        let entry_resources = entry_main.join("resources");
+        let entry_assets = entry_resources.join("assets");
+
+        create_dir_all(&entry)?;
+        create_dir_all(&entry_main)?;
+        create_dir_all(&entry_ets)?;
+        create_dir_all(&entry_libs)?;
+        create_dir_all(&entry_resources)?;
+        create_dir_all(&entry_assets)?;
+
+        tracing::debug!(
+            r#"Initialized OHOS dirs:
+- entry/              {entry:?}
+- entry/src:          {entry_main:?}
+- entry/src/ets:      {entry_ets:?}
+- entry/src/libs:     {entry_libs:?}
+- entry/src/resources: {entry_resources:?}
+- entry/src/assets:   {entry_assets:?}
+"#
+        );
+
+        // Write module.json5 (OHOS module configuration)
+        let module_json5 = r#"{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "srcEntry": "./ets/Application/AbilityStage.ets",
+    "description": "$string:module_desc",
+    "mainElement": "EntryAbility.ets",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "abilities": [
+      {
+        "name": "EntryAbility",
+        "srcEntry": "./ets/Application/EntryAbility.ets",
+        "description": "$string:EntryAbility_desc",
+        "icon": "$media:icon",
+        "label": "$string:EntryAbility_label",
+        "startWindowIcon": "$media:icon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "action.system.home"
+            ]
+          }
+        ]
+      }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      }
+    ]
+  }
+}"#;
+        write(entry.join("src").join("main").join("module.json5"), module_json5)?;
+
+        // Write app.json5 (OHOS app configuration)
+        let app_json5 = format!(r#"{{" {{
+  "bundleName": "{}",
+  "vendor": "dioxus",
+  "versionCode": 1000000,
+  "versionName": "{}",
+  "icon": "$media:app_icon",
+  "label": "$string:app_name",
+  "targetAPIVersion": 9
+}})"#, self.bundle_identifier(), self.crate_version());
+        write(root.join("AppScope").join("resources").join("base").join("element").join("string.json"), app_json5);
+
+        // Create basic resources directory structure
+        let app_resources = root.join("AppScope").join("resources").join("base");
+        create_dir_all(app_resources.join("element"))?;
+        create_dir_all(app_resources.join("media"))?;
+        create_dir_all(entry_resources.join("element"))?;
+        create_dir_all(entry_resources.join("media"))?;
+
+        // Write basic resource files
+        write(
+            entry_resources.join("element").join("string.json"),
+            r#"{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Dioxus application module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Dioxus application"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Dioxus App"
+    }
+  ]
+}"#,
+        )?;
+
+        write(
+            entry_resources.join("resources.json"),
+            r##"{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#FFFFFF"
+    }
+  ]
+}"##,
         )?;
 
         Ok(())
@@ -4900,6 +5069,9 @@ impl BuildRequest {
             // er.... maybe even all the kotlin/java/gradle stuff?
             BundleFormat::Android => {}
 
+            // OpenHarmony app.json and other metadata
+            BundleFormat::OpenHarmony => {}
+
             // Probably some custom format or a plist file (haha)
             // When we do the proper bundle, we'll need to do something with wix templates, I think?
             BundleFormat::Windows => {}
@@ -4912,6 +5084,7 @@ impl BuildRequest {
             // We could also distribute them as a deb/rpm for linux and msi for windows
             BundleFormat::Web => {}
             BundleFormat::Server => {}
+            BundleFormat::OpenHarmony => {}
         }
 
         Ok(())
@@ -4940,6 +5113,7 @@ impl BuildRequest {
             | BundleFormat::Linux
             | BundleFormat::Ios
             | BundleFormat::Android
+            | BundleFormat::OpenHarmony
             | BundleFormat::Server => {}
         }
 
@@ -5514,6 +5688,68 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         Ok(self.root_dir().join(gradle_exec_name))
     }
 
+    /// Run ohrs build and return the path to the `.hap` file
+    ///
+    /// OHOS uses the `ohrs` tool for building, similar to how Android uses gradle.
+    /// This method runs `ohrs build` in the OHOS project directory.
+    pub(crate) async fn ohrs_build(&self) -> Result<PathBuf> {
+        let ohos_tools = self.workspace.ohos_tools()?;
+
+        let output = Command::new(&ohos_tools.ohrs)
+            .arg("build")
+            .current_dir(self.root_dir())
+            .output()
+            .await
+            .context("Failed to run ohrs build")?;
+
+        if !output.status.success() {
+            bail!(
+                "Failed to build OHOS app: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        Ok(self.debug_hap_path())
+    }
+
+    /// Copy the built OHOS artifacts to the entry/libs directory
+    ///
+    /// OHOS requires the native library (.so) to be in the entry/libs directory
+    /// with the appropriate architecture subdirectory.
+    pub(crate) fn copy_ohos_artifacts(&self) -> Result<()> {
+        use std::fs;
+        use std::path::PathBuf;
+
+        // Determine the architecture-specific libs directory
+        let arch = match self.triple.architecture {
+            target_lexicon::Architecture::Aarch64(_) => "arm64-v8a",
+            target_lexicon::Architecture::Arm(_) => "armeabi-v7a",
+            target_lexicon::Architecture::X86_32(_) => "x86",
+            target_lexicon::Architecture::X86_64 => "x86_64",
+            _ => bail!("Unsupported architecture for OHOS: {:?}", self.triple.architecture),
+        };
+
+        let libs_dir = self.root_dir().join("entry").join("libs").join(arch);
+        fs::create_dir_all(&libs_dir).context("Failed to create entry/libs directory")?;
+
+        // Copy the main library
+        let lib_name = self.platform_exe_name();
+        let src_lib = self.exe_dir().join(&lib_name);
+
+        if src_lib.exists() {
+            let dest_lib = libs_dir.join(&lib_name);
+            fs::copy(&src_lib, &dest_lib).context("Failed to copy library to entry/libs")?;
+            tracing::debug!("Copied {} to {:?}", lib_name, dest_lib);
+        }
+
+        Ok(())
+    }
+
+    /// Get the OHOS build directory
+    pub(crate) fn ohos_build_dir(&self) -> PathBuf {
+        self.root_dir().join("entry").join("build")
+    }
+
     pub(crate) fn debug_apk_path(&self) -> PathBuf {
         self.root_dir()
             .join("app")
@@ -5522,6 +5758,20 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             .join("apk")
             .join("debug")
             .join("app-debug.apk")
+    }
+
+    pub(crate) fn debug_hap_path(&self) -> PathBuf {
+        self.root_dir()
+            .join("entry")
+            .join("build")
+            .join("default")
+            .join("outputs")
+            .join("default")
+            .join("entry-default-signed.hap")
+    }
+
+    pub(crate) fn ohos_hap_path(&self) -> PathBuf {
+        self.debug_hap_path()
     }
 
     /// We only really currently care about:
@@ -5571,6 +5821,10 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
                 self.build_android_app_dir()?;
             }
 
+            if self.bundle == BundleFormat::OpenHarmony {
+                self.build_ohos_app_dir()?;
+            }
+
             Ok(())
         });
 
@@ -5600,7 +5854,7 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             BundleFormat::Server => self.root_dir().join("public").join("assets"),
 
             // everyone else is soooo normal, just app/assets :)
-            BundleFormat::Web | BundleFormat::Ios | BundleFormat::Windows | BundleFormat::Linux => {
+            BundleFormat::Web | BundleFormat::Ios | BundleFormat::Windows | BundleFormat::Linux | BundleFormat::OpenHarmony => {
                 self.root_dir().join("assets")
             }
         }
@@ -5634,6 +5888,7 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             BundleFormat::Windows
             | BundleFormat::Linux
             | BundleFormat::Ios
+            | BundleFormat::OpenHarmony
             | BundleFormat::Server => self.root_dir(),
         }
     }
@@ -5688,6 +5943,7 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
             BundleFormat::Ios => self.verify_ios_tooling().await?,
             BundleFormat::Android => self.verify_android_tooling().await?,
             BundleFormat::Linux => self.verify_linux_tooling().await?,
+            BundleFormat::OpenHarmony => self.verify_ohos_tooling().await?,
             BundleFormat::MacOS | BundleFormat::Windows | BundleFormat::Server => {}
         }
 
@@ -5819,6 +6075,33 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
         bail!(
             "Android linker not found at {linker:?}. Please set the `ANDROID_NDK_HOME` environment variable to the root of your NDK installation."
         );
+    }
+
+    /// Check if the OHOS tooling is installed
+    ///
+    /// looks for ohrs and hdc
+    async fn verify_ohos_tooling(&self) -> Result<()> {
+        let ohos_tools = self.workspace.ohos_tools()?;
+
+        tracing::debug!("Verifying OHOS tools:");
+        tracing::debug!("  - ohrs: {:?}", ohos_tools.ohrs);
+        tracing::debug!("  - hdc: {:?}", ohos_tools.hdc);
+
+        if !ohos_tools.ohrs.exists() {
+            bail!(
+                "OHOS build tool `ohrs` not found at {:?}. Please install it via `cargo install ohrs`.",
+                ohos_tools.ohrs
+            );
+        }
+
+        if !ohos_tools.hdc.exists() {
+            bail!(
+                "OHOS device connector `hdc` not found at {:?}. Please ensure it's available in PATH.",
+                ohos_tools.hdc
+            );
+        }
+
+        Ok(())
     }
 
     /// Ensure the right dependencies are installed for linux apps.

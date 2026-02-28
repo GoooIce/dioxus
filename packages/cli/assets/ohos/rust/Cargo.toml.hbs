@@ -1,0 +1,27 @@
+[package]
+name = "{{crate_name}}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dioxus = { {{#if dioxus_path}}path = "{{dioxus_path}}"{{else}}git = "{{dioxus_git}}"{{/if}}, features = [
+    "mobile",
+] }
+dioxus-desktop = { {{#if dioxus_path}}path = "{{dioxus_path}}"{{else}}git = "{{dioxus_git}}"{{/if}} }
+openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", features = [
+    "webview",
+] }
+openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
+
+napi-ohos = "1.1"
+napi-derive-ohos = "1.1"
+
+[build-dependencies]
+napi-build-ohos = "1.1"
+
+[features]
+default = ["mobile"]
+mobile = ["dioxus/mobile"]

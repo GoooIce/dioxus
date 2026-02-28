@@ -708,6 +708,26 @@ impl AppServer {
             }
         }
 
+        // If the client is running on OpenHarmony, we need to remove the port forwarding
+        // using hdc (similar to adb for Android)
+        if matches!(self.client.build.bundle, BundleFormat::OpenHarmony) {
+            if let Ok(tools) = self.workspace.ohos_tools() {
+                // HDC uses the same port forwarding syntax as ADB
+                if let Err(err) = Command::new(&tools.hdc)
+                    .arg("fport")
+                    .arg("remove")
+                    .arg(format!("tcp:{}", self.devserver_port))
+                    .output()
+                    .await
+                {
+                    tracing::error!(
+                        "failed to remove OHOS forwarded port {}: {err}",
+                        self.devserver_port
+                    );
+                }
+            }
+        }
+
         // force the tailwind watcher to stop - if we don't, it eats our stdin
         self.tw_watcher.abort();
 

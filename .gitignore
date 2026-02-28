@@ -40,5 +40,8 @@ node_modules/
 tmp/
 bundle/
 
+# reference repositories (temporary)
+reference/
+
 # in debugging we frequently dump wasm to wat with `wasm-tools print`
 *.wat

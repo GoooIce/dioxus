@@ -1,0 +1,28 @@
+// Dioxus OpenHarmony app template
+use dioxus::prelude::*;
+use dioxus::mobile::{
+    tao::event_loop::EventLoopBuilder, tao::platform::ohos::EventLoopBuilderExtOpenHarmony,
+    WindowBuilder, UserWindowEvent
+};
+use dioxus_desktop::Config;
+use openharmony_ability::OpenHarmonyApp;
+use openharmony_ability_derive::ability;
+
+#[component]
+fn App() -> Element {
+    rsx! {
+        div { "Hello, OpenHarmony!" }
+    }
+}
+
+#[ability(webview, protocol = "dioxus")]
+fn openharmony(app: OpenHarmonyApp) {
+    let event_loop = EventLoopBuilder::<UserWindowEvent>::with_user_event()
+        .with_openharmony_app(app.clone())
+        .build();
+
+    let builder = dioxus::LaunchBuilder::new();
+    let config = Config::new().with_event_loop(event_loop);
+
+    builder.with_cfg(config).launch(App);
+}

@@ -673,6 +673,11 @@ impl AppBuilder {
             | BundleFormat::MacOS
             | BundleFormat::Windows
             | BundleFormat::Linux => self.open_with_main_exe(envs, args)?,
+
+            BundleFormat::OpenHarmony => {
+                self.open_openharmony(devserver_ip, envs)
+                    .await?;
+            }
         };
 
         self.builds_opened += 1;
@@ -881,6 +886,13 @@ impl AppBuilder {
                     .copy_file_to_android_tmp(&changed_file, &bundled_name)
                     .await;
             }
+
+            // If the emulator is OpenHarmony, we need to copy the asset to the device with `hdc file send`
+            if self.build.bundle == BundleFormat::OpenHarmony {
+                _ = self
+                    .copy_file_to_ohos_tmp(&changed_file, &bundled_name)
+                    .await;
+            }
             bundled_names.push(bundled_name);
         }
 
@@ -913,6 +925,34 @@ impl AppBuilder {
         }
 
         Ok(target)
+    }
+
+    /// Copy this file to the tmp folder on the OpenHarmony device, returning the path to the copied file
+    ///
+    /// Similar to Android, when we push patches/updates, the runtime will load them from the tmp folder.
+    /// OHOS uses `hdc file send` instead of `adb push`.
+    pub(crate) async fn copy_file_to_ohos_tmp(
+        &self,
+        changed_file: &Path,
+        bundled_name: &Path,
+    ) -> Result<PathBuf> {
+        let target = format!("/data/storage/el2/base/haps/entry/cache/{}", bundled_name.display());
+        tracing::debug!("Pushing asset to OHOS device: {target}");
+
+        let res = Command::new(&self.build.workspace.ohos_tools()?.hdc)
+            .arg("file")
+            .arg("send")
+            .arg(changed_file)
+            .arg(&target)
+            .output()
+            .await
+            .context("Failed to send asset to OHOS device");
+
+        if let Err(e) = res {
+            tracing::debug!("Failed to send asset to OHOS device: {e}");
+        }
+
+        Ok(PathBuf::from(target))
     }
 
     /// Open the native app simply by running its main exe
@@ -1506,6 +1546,172 @@ impl AppBuilder {
         Ok(())
     }
 
+    /// Launch the OpenHarmony app and deploy the application.
+    ///
+    /// This function handles the process of starting the OHOS app, installing the HAP,
+    /// forwarding the development server port, and launching the application.
+    ///
+    /// The following `hdc` commands are executed:
+    ///
+    /// 1. **Port Forwarding**:
+    ///    - `hdc fport tcp:<port> tcp:<port>`: Forwards the development server port from the host
+    ///      machine to the OHOS device.
+    ///
+    /// 2. **HAP Installation**:
+    ///    - `hdc install <hap_path>`: Installs the HAP onto the OHOS device.
+    ///
+    /// 3. **App Launch**:
+    ///    - `hdc shell aa start -a <ability_name> -b <bundle_name>`: Launches the app.
+    async fn open_openharmony(
+        &mut self,
+        devserver_socket: SocketAddr,
+        envs: Vec<(String, String)>,
+    ) -> Result<()> {
+        let hap_path = self.build.ohos_hap_path();
+        let session_cache = self.build.session_cache_dir();
+        let bundle_name = self.build.bundle_identifier();
+        let ohos_tools = self.build.workspace.ohos_tools()?;
+        let hdc = ohos_tools.hdc.clone();
+        let (stdout_tx, stdout_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
+        // Start backgrounded since .open() is called while in the arm of the top-level match
+        let task = tokio::task::spawn(async move {
+            // Wait for device to be ready
+            let _ = Command::new(&hdc)
+                .arg("target")
+                .arg("wait")
+                .output()
+                .await;
+
+            let port = devserver_socket.port();
+            if let Err(e) = Command::new(&hdc)
+                .arg("fport")
+                .arg(format!("tcp:{port}"))
+                .arg(format!("tcp:{port}"))
+                .output()
+                .await
+            {
+                tracing::error!("failed to forward port {port}: {e}");
+            }
+
+            // Install HAP
+            // hdc install <hap_path>
+            let res = Command::new(&hdc)
+                .arg("install")
+                .arg(&hap_path)
+                .output()
+                .await?;
+            let std_err = String::from_utf8_lossy(&res.stderr);
+            if !std_err.is_empty() {
+                tracing::error!("Failed to install hap with `hdc`: {std_err}");
+            }
+
+            // Write the env vars to a .env file in our session cache
+            let env_file = session_cache.join(".env");
+            _ = std::fs::write(
+                &env_file,
+                envs.iter()
+                    .map(|(key, value)| format!("{key}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+
+            // Push the env file to the device (OHOS uses data/storage path)
+            let device_env_path = format!("/data/storage/el2/base/haps/entry/cache/.env");
+            Command::new(&hdc)
+                .arg("file")
+                .arg("send")
+                .arg(&env_file)
+                .arg(&device_env_path)
+                .output()
+                .await?;
+
+            // Launch the app
+            // hdc shell aa start -a EntryAbility -b <bundle_name>
+            let ability_name = format!("{bundle_name}.EntryAbility");
+            let res = Command::new(&hdc)
+                .arg("shell")
+                .arg("aa")
+                .arg("start")
+                .arg("-a")
+                .arg("EntryAbility")
+                .arg("-b")
+                .arg(&bundle_name)
+                .output()
+                .await?;
+            let std_err = String::from_utf8_lossy(res.stderr.trim_ascii());
+            if !std_err.is_empty() {
+                tracing::error!("Failed to start app with `hdc`: {std_err}");
+            }
+
+            // Get the app's PID with retries for log filtering
+            // Retry up to 10 times (10 seconds total) since app launch is asynchronous
+            let mut pid: Option<String> = None;
+            for attempt in 1..=10 {
+                match Self::get_ohos_app_pid(&hdc, &bundle_name).await {
+                    Ok(p) => {
+                        pid = Some(p);
+                        break;
+                    }
+                    Err(_) if attempt < 10 => {
+                        tracing::debug!(
+                            "OHOS app PID not found yet, retrying in 1 second... (attempt {}/10)",
+                            attempt
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                    Err(e) => {
+                        return Err(e).context(
+                            "Failed to get OHOS app PID after 10 attempts - app may not have started",
+                        );
+                    }
+                }
+            }
+
+            let pid = match pid {
+                Some(p) => p,
+                None => {
+                    tracing::warn!("Could not get OHOS app PID, logs will not be filtered");
+                    // Still continue without PID-based filtering
+                    String::new()
+                }
+            };
+
+            // Spawn hilog with filtering
+            // OHOS uses hilog instead of logcat
+            // Format: hdc shell hilog -x | grep <pid>
+            let mut hilog_cmd = Command::new(&hdc);
+            hilog_cmd
+                .arg("shell")
+                .arg("hilog");
+
+            // If we have a PID, filter by it
+            if !pid.is_empty() {
+                hilog_cmd.arg("-T").arg(&pid);
+            }
+
+            let mut child = hilog_cmd
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()?;
+
+            let stdout = child.stdout.take().unwrap();
+            let mut reader = BufReader::new(stdout).lines();
+
+            while let Ok(Some(line)) = reader.next_line().await {
+                _ = stdout_tx.send(line);
+            }
+
+            Ok::<(), Error>(())
+        });
+
+        self.spawn_handle = Some(task);
+        self.adb_logcat_stdout = Some(UnboundedReceiverStream::new(stdout_rx));
+
+        Ok(())
+    }
+
     fn make_entropy_path(exe: &PathBuf) -> PathBuf {
         let id = uuid::Uuid::new_v4();
         let name = id.to_string();
@@ -1531,7 +1737,7 @@ impl AppBuilder {
         // The requirement here is based on the platform, not necessarily our current architecture.
         let requires_entropy = match self.build.bundle {
             // When running "bundled", we don't need entropy
-            BundleFormat::Web | BundleFormat::MacOS | BundleFormat::Ios | BundleFormat::Android => {
+            BundleFormat::Web | BundleFormat::MacOS | BundleFormat::Ios | BundleFormat::Android | BundleFormat::OpenHarmony => {
                 false
             }
 
@@ -1610,7 +1816,8 @@ impl AppBuilder {
             BundleFormat::MacOS
             | BundleFormat::Windows
             | BundleFormat::Linux
-            | BundleFormat::Server => {
+            | BundleFormat::Server
+            | BundleFormat::OpenHarmony => {
                 let Some(Some(pid)) = self.child.as_mut().map(|f| f.id()) else {
                     tracing::warn!("No process to attach debugger to");
                     return Ok(());
@@ -1844,6 +2051,28 @@ impl AppBuilder {
 
         if pid.is_empty() {
             anyhow::bail!("App process not found - may not have started yet");
+        }
+
+        Ok(pid)
+    }
+
+    /// Get the PID of the running OpenHarmony app
+    async fn get_ohos_app_pid(
+        hdc: &Path,
+        bundle_name: &str,
+    ) -> Result<String> {
+        // OHOS uses shell pidof to get the process ID
+        let output = Command::new(hdc)
+            .arg("shell")
+            .arg("pidof")
+            .arg(bundle_name)
+            .output()
+            .await?;
+
+        let pid = String::from_utf8(output.stdout)?.trim().to_string();
+
+        if pid.is_empty() {
+            anyhow::bail!("OHOS app process not found - may not have started yet");
         }
 
         Ok(pid)

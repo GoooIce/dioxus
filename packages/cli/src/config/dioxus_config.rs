@@ -66,6 +66,7 @@ pub enum BundlePlatform {
     MacOS,
     Windows,
     Linux,
+    OpenHarmony,
     Web,
 }
 
@@ -77,6 +78,7 @@ impl From<crate::BundleFormat> for BundlePlatform {
             crate::BundleFormat::MacOS => BundlePlatform::MacOS,
             crate::BundleFormat::Windows => BundlePlatform::Windows,
             crate::BundleFormat::Linux => BundlePlatform::Linux,
+            crate::BundleFormat::OpenHarmony => BundlePlatform::OpenHarmony,
             crate::BundleFormat::Web | crate::BundleFormat::Server => BundlePlatform::Web,
         }
     }
@@ -92,6 +94,7 @@ impl DioxusConfig {
             BundlePlatform::MacOS => self.macos.identifier.as_deref(),
             BundlePlatform::Windows => self.windows.identifier.as_deref(),
             BundlePlatform::Linux => self.linux.identifier.as_deref(),
+            BundlePlatform::OpenHarmony => None,
             BundlePlatform::Web => None,
         };
         platform_override.or(self.bundle.identifier.as_deref())

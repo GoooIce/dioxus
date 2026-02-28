@@ -365,7 +365,10 @@ shell-words = "1.1.0"
 
 # native
 keyboard-types = { version = "0.7", default-features = false }
-winit = { version = "0.30.11", features = ["rwh_06"] }
+winit = { version = "0.30.9", features = ["rwh_06"] }
+
+[patch.crates-io]
+winit = { git = "https://github.com/richerfu/winit", rev = "e45bd9274c6d5cec62b2d8e4daefce9f33c60488" }
 
 # our release profile should be fast to compile and fast to run
 # when we ship our CI builds, we turn on LTO which improves perf leftover by turning on incremental

@@ -2,7 +2,7 @@ use super::*;
 use crate::TraceSrc;
 use anyhow::{bail, Context};
 use cargo_generate::{GenerateArgs, TemplatePath, Vcs};
-use std::{fs, path::Path};
+use std::{env, fs, path::Path};
 
 pub(crate) static DEFAULT_TEMPLATE: &str = "gh:dioxuslabs/dioxus-template";
 
@@ -19,6 +19,10 @@ pub struct Create {
     /// Template path
     #[clap(short, long)]
     pub template: Option<String>,
+
+    /// Create a new OpenHarmony (OHOS) project
+    #[arg(long, conflicts_with_all(["template", "branch", "revision", "tag", "subtemplate"]))]
+    pub ohos: bool,
 
     /// Branch to select when using `template` from a git repository.
     /// Mutually exclusive with: `--revision`, `--tag`.
@@ -63,6 +67,11 @@ impl Create {
 
         check_path(&self.path).await?;
 
+        // If OHOS is requested, use the local OHOS template
+        if self.ohos {
+            return self.create_ohos().await;
+        }
+
         // Perform a connectivity check so we just don't it around doing nothing if there's a network error
         if self.template.is_none() {
             check_connectivity().await?;
@@ -105,6 +114,73 @@ impl Create {
         let path = cargo_generate::generate(args)?;
 
         _ = post_create(&path, &self.vcs.unwrap_or(Vcs::Git));
+
+        Ok(StructuredOutput::Success)
+    }
+
+    /// Create a new OpenHarmony (OHOS) project using the local template
+    async fn create_ohos(self) -> Result<StructuredOutput> {
+        let project_name = self.name.as_ref().unwrap();
+        let crate_name = project_name.to_lowercase().replace('-', "_");
+        let bundle_name = format!("com.example.{}", project_name.to_lowercase().replace('-', ""));
+
+        // Build template variables
+        let mut define = vec![
+            format!("project_name={}", project_name),
+            format!("crate_name={}", crate_name),
+            format!("bundle_name={}", bundle_name),
+            format!("vendor=Example"),
+            format!("version=0.1.0"),
+            format!("dioxus_git=https://github.com/DioxusLabs/dioxus"),
+        ];
+
+        // Add user-provided options which can override defaults
+        define.extend(self.option);
+
+        // Get the OHOS template path from CLI assets
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let template_path = manifest_dir.join("assets").join("ohos");
+
+        if !template_path.exists() {
+            tracing::error!(dx_src = ?TraceSrc::Dev, "OHOS template not found at: {}", template_path.display());
+            bail!("OHOS template not found. Please ensure dioxus-cli is properly installed.");
+        }
+
+        tracing::info!(dx_src = ?TraceSrc::Dev, "Using OHOS template from: {}", template_path.display());
+
+        // Create destination directory
+        std::fs::create_dir_all(&self.path)?;
+
+        let args = GenerateArgs {
+            define,
+            destination: Some(self.path.clone()),
+            init: true,
+            name: self.name.clone(),
+            silent: self.yes,
+            vcs: self.vcs.clone(),
+            template_path: TemplatePath {
+                auto_path: Some(template_path.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+            verbose: crate::logging::VERBOSITY
+                .get()
+                .map(|f| f.verbose)
+                .unwrap_or(false),
+            ..Default::default()
+        };
+
+        tracing::debug!(dx_src = ?TraceSrc::Dev, "Creating new OHOS project with args: {args:#?}");
+        let _generated_path = cargo_generate::generate(args)?;
+
+        // Run post-create steps (formatting, git init, etc.)
+        // Note: OHOS projects don't have Cargo.toml in the root, so we skip some steps
+        if let Some(vcs) = &self.vcs {
+            vcs.initialize(&self.path, Some("main"), true)?;
+        }
+
+        tracing::info!(dx_src = ?TraceSrc::Dev, "Generated OHOS project at {}\n\nAn OHOS project has been created with:\n  - Rust library in rust/\n  - OHOS application configuration\n  - HarmonyOS native integration\n\nTo build your OHOS app:\n  1. Install the HarmonyOS SDK\n  2. Configure DevEco Studio\n  3. Run `dx build --platform ohos`\n\nMore information is available in the generated README.md.\n\nBuild cool things! ✌️", self.path.display());
 
         Ok(StructuredOutput::Success)
     }

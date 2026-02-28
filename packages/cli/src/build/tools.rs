@@ -349,6 +349,220 @@ impl AndroidTools {
     }
 }
 
+/// The tools for OpenHarmony (ohrs, hdc, sdk, nodejs)
+#[derive(Debug, Clone)]
+pub(crate) struct OhosTools {
+    pub(crate) ohrs: PathBuf,
+    pub(crate) hdc: PathBuf,
+    pub(crate) ohos_sdk: Option<PathBuf>,
+    pub(crate) nodejs: Option<PathBuf>,
+}
+
+/// Detect and return OHOS tools if available
+pub fn get_ohos_tools() -> Option<Arc<OhosTools>> {
+    // Check OHOS_SDK from environment variables first
+    let ohos_sdk = var_or_debug("OHOS_SDK")
+        .or_else(|| var_or_debug("HARmonyOS_SDK"))
+        .or_else(|| var_or_debug("HUAWEI_SDK"));
+
+    // Detect ohrs tool - try PATH first, then cargo install directory
+    let ohrs = which::which("ohrs")
+        .ok()
+        .or_else(|| {
+            // Try cargo install directory
+            let cargo_home = std::env::var_os("CARGO_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+                    home.join(".cargo")
+                });
+            let bin_path = cargo_home.join("bin").join("ohrs");
+            if bin_path.exists() {
+                Some(bin_path)
+            } else {
+                None
+            }
+        });
+
+    let ohrs = ohrs?;
+
+    // Detect hdc tool - OHOS device manager (similar to adb)
+    let hdc = if let Some(ref sdk) = ohos_sdk {
+        // Try to find hdc in SDK
+        let hdc_path = sdk.join("toolchains").join("hdc");
+        if hdc_path.exists() {
+            hdc_path
+        } else {
+            // Fallback to PATH
+            PathBuf::from("hdc")
+        }
+    } else {
+        // No SDK found, use from PATH
+        PathBuf::from("hdc")
+    };
+
+    // Detect Node.js (DevEco Studio requires Node.js for building)
+    let nodejs = std::env::var_os("NODE_PATH")
+        .map(PathBuf::from)
+        .or_else(|| which::which("node").ok())
+        .or_else(|| {
+            // Try common Node.js installation paths
+            #[cfg(target_os = "macos")]
+            {
+                let node_paths = [
+                    "/usr/local/bin/node",
+                    "/opt/homebrew/bin/node",
+                    "/Users/Shared/Huawei/nodejs/node",
+                ];
+                for path in node_paths {
+                    let path_buf = PathBuf::from(path);
+                    if path_buf.exists() {
+                        return Some(path_buf);
+                    }
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                let node_paths = [
+                    r"C:\Program Files\nodejs\node.exe",
+                    r"C:\Program Files (x86)\nodejs\node.exe",
+                ];
+                for path in node_paths {
+                    let path_buf = PathBuf::from(path);
+                    if path_buf.exists() {
+                        return Some(path_buf);
+                    }
+                }
+                // Try %APPDATA%\npm\node.cmd
+                if let Some(appdata) = std::env::var_os("APPDATA") {
+                    let npm_path = PathBuf::from(appdata).join("npm").join("node.cmd");
+                    if npm_path.exists() {
+                        return Some(npm_path);
+                    }
+                }
+            }
+
+            #[cfg(target_os = "linux")]
+            {
+                let node_paths = [
+                    "/usr/bin/node",
+                    "/usr/local/bin/node",
+                ];
+                for path in node_paths {
+                    let path_buf = PathBuf::from(path);
+                    if path_buf.exists() {
+                        return Some(path_buf);
+                    }
+                }
+                // Try ~/Huawei/nodejs/node
+                if let Some(home) = std::env::var_os("HOME") {
+                    let huawei_node = PathBuf::from(home).join("Huawei/nodejs/node");
+                    if huawei_node.exists() {
+                        return Some(huawei_node);
+                    }
+                }
+            }
+
+            None
+        });
+
+    Some(Arc::new(OhosTools {
+        ohrs,
+        hdc,
+        ohos_sdk,
+        nodejs,
+    }))
+}
+
+impl OhosTools {
+    /// Build the ohrs build command with appropriate arguments
+    pub(crate) fn build_command(&self) -> Command {
+        let mut cmd = Command::new(&self.ohrs);
+        cmd.arg("build");
+        cmd
+    }
+
+    /// Detect connected OHOS devices using hdc
+    pub(crate) async fn detect_device(&self) -> Option<OhosDeviceInfo> {
+        let output = Command::new(&self.hdc)
+            .arg("list")
+            .arg("targets")
+            .output()
+            .await
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let lines: Vec<&str> = stdout.lines().collect();
+
+            if !lines.is_empty() {
+                // Parse device info from hdc output
+                // Format is typically: "<device_id>"
+                let device_id = lines.first()?.trim().to_string();
+
+                // Try to get more device info
+                let arch_output = Command::new(&self.hdc)
+                    .arg("-t")
+                    .arg(&device_id)
+                    .arg("shell")
+                    .arg("uname")
+                    .arg("-m")
+                    .output()
+                    .await
+                    .ok();
+
+                let arch = arch_output.and_then(|out| {
+                    String::from_utf8(out.stdout).ok()
+                }).map(|s| s.trim().to_string());
+
+                return Some(OhosDeviceInfo {
+                    id: device_id,
+                    arch,
+                });
+            }
+        }
+
+        None
+    }
+
+    /// Return installation hint if tools are missing
+    pub(crate) fn install_hint(&self) -> &'static str {
+        "OHOS tools not found. Please install:
+    - ohrs: cargo install ohrs
+    - OHOS SDK: Download from https://developer.harmonyos.com/cn/develop/deveco-studio
+    - DevEco Studio: Includes SDK and hdc tool
+    - Node.js: Required for DevEco build process"
+    }
+
+    /// Get the OHOS SDK path
+    pub(crate) fn sdk(&self) -> Option<&PathBuf> {
+        self.ohos_sdk.as_ref()
+    }
+
+    /// Get the Node.js path
+    pub(crate) fn nodejs(&self) -> Option<&PathBuf> {
+        self.nodejs.as_ref()
+    }
+
+    /// Get the hdc tool path
+    pub(crate) fn hdc(&self) -> &PathBuf {
+        &self.hdc
+    }
+
+    /// Get the ohrs tool path
+    pub(crate) fn ohrs(&self) -> &PathBuf {
+        &self.ohrs
+    }
+}
+
+/// Device information for OHOS devices
+#[derive(Debug, Clone)]
+pub(crate) struct OhosDeviceInfo {
+    pub(crate) id: String,
+    pub(crate) arch: Option<String>,
+}
+
 fn var_or_debug(name: &str) -> Option<PathBuf> {
     use std::env::var;
 

@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Dioxus module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Dioxus application"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "{{project_name}}"
+    }
+  ]
+}

@@ -95,6 +95,11 @@ impl Bundle {
                     .context("Failed to run gradle bundleRelease")?;
                 bundles.push(aab);
             }
+
+            BundleFormat::OpenHarmony => {
+                tracing::warn!("OpenHarmony bundling not yet implemented");
+                bundles.push(client.root_dir());
+            }
         };
 
         // Copy the bundles to the output directory if one was specified
